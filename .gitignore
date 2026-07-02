@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# Common Node & Env
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+coverage/
+.nyc_output/
+*.tgz
+
+# Build & Electron
+build/
+release/
+out/
+
+# IDEs
+.idea/
+.vscode/

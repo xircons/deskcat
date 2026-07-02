@@ -1,0 +1,20 @@
+{
+  "name": "daily-pet",
+  "version": "0.1.0",
+  "description": "A pixel cat that floats on your screen and helps you jot notes for your daily reflection.",
+  "main": "dist/main/main.js",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && electron .",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "electron": "^31.3.0",
+    "typescript": "^5.5.4",
+    "@types/node": "^20.14.0"
+  },
+  "dependencies": {
+    "uiohook-napi": "^1.5.4"
+  }
+}

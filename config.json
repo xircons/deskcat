@@ -1,0 +1,12 @@
+{
+  "reminders": ["11:30", "14:30", "16:00", "17:00"],
+  "reflectionTime": "17:00",
+  "moodThresholds": {
+    "lonelyMinutes": 60,
+    "grumpyMinutes": 180
+  },
+  "autoStartAtLogin": true,
+  "typing": {
+    "maxKeysPerSecond": 5
+  }
+}
