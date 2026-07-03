@@ -1,4 +1,3 @@
-
 interface PetApi {
   readAsset(name: string): string;
   onCursor(cb: (p: { x: number; y: number }) => void): void;
@@ -10,6 +9,8 @@ interface PetApi {
   getToday(): Promise<{ date: string; entries: { time: string; text: string; type: string }[] }>;
   moveWindow(dx: number, dy: number): void;
   ensureOnScreen(): void;
+  getOverhang(): Promise<{ left: number; right: number; top: number; bottom: number }>;
+  setIgnoreMouseEvents(ignore: boolean): void;
 }
 const api = (window as unknown as { petApi: PetApi }).petApi;
 
@@ -65,6 +66,13 @@ function showPose(name: PoseName): void {
   }
 })();
 
+const pupilEls = {} as Record<PoseName, SVGElement[]>;
+for (const name of Object.keys(poseEls) as PoseName[]) {
+  pupilEls[name] = Array.from(
+    poseEls[name].querySelectorAll<SVGElement>('.pupil-left, .pupil-right')
+  );
+}
+
 type Mood = 'content' | 'lonely' | 'grumpy';
 let mood: Mood = 'content';
 let typingRate = 0;
@@ -88,33 +96,10 @@ function bodyColor(): string {
   return `rgb(${c.map(Math.round).join(',')})`;
 }
 
-const N_SEG = 16;
-const SPRING = 0.038;
-const DAMPING = 0.93;
-const STRETCH_HOLD_MS = 1600;
-const STRETCH_T_SPRING = 0.13;
-const STRETCH_T_DAMP = 0.78;
-const PEND_SPRING = 0.003;
-const PEND_DAMP = 0.962;
-const PEND_IMPULSE = 0.065;
-const PEND_MAX_DEG = 45;
-const PEND_MAX_PX = 22;
-const WIGGLE_IMPULSE = 0.008;
-const WIGGLE_MIN_SPEED = 6;
-const WIGGLE_MAX_DX = 2.5;
+const HEAD_ANCHOR_SHIFT_Y = 235.5;
 
-let stretchT = 0;
-let stretchTVel = 0;
-let pendulumAngle = 0;
-let pendulumVelAngle = 0;
-let prevDragDx = 0;
-let lastWiggleDx = 0;
-let lastDragMoveAt = 0;
-let dragHoldStartAt = 0;
-let dragging = false;
-let releasing = false;
-const dxState: number[] = new Array(N_SEG).fill(0);
-const velState: number[] = new Array(N_SEG).fill(0);
+const phys = createPhysicsState();
+let pointerDown = false;
 
 interface LerpDatum {
   rect: SVGRectElement;
@@ -216,18 +201,18 @@ function setupChain(): ChainData | null {
   if (!bodyRects.length) return null;
   const bodyYmin = Math.min(...bodyRects.map((rd) => rd.y));
   const bodyYmax = Math.max(...bodyRects.map((rd) => rd.y + rd.h));
-  const segHeight = (bodyYmax - bodyYmin) / N_SEG;
+  const segHeight = (bodyYmax - bodyYmin) / PHYS.N_SEG;
 
   const segments: Array<{ rects: typeof rectInfo }> = [];
-  for (let i = 0; i < N_SEG; i++) segments.push({ rects: [] });
+  for (let i = 0; i < PHYS.N_SEG; i++) segments.push({ rects: [] });
   for (const rd of bodyRects) {
     const cy = rd.y + rd.h / 2;
-    const idx = Math.min(N_SEG - 1, Math.max(0, Math.floor((cy - bodyYmin) / segHeight)));
+    const idx = Math.min(PHYS.N_SEG - 1, Math.max(0, Math.floor((cy - bodyYmin) / segHeight)));
     segments[idx].rects.push(rd);
   }
 
   const lerpData: LerpDatum[] = [];
-  for (let i = 0; i < N_SEG; i++) {
+  for (let i = 0; i < PHYS.N_SEG; i++) {
     const cumulativeY = bodyYmin + i * segHeight;
     for (const rd of segments[i].rects) {
       const sy = startYs[rd.origIdx] !== undefined ? startYs[rd.origIdx] : rd.y;
@@ -251,7 +236,7 @@ function setupChain(): ChainData | null {
   let parent: SVGElement = catContent;
   const wrappers: SVGGElement[] = [];
   const NS = 'http://www.w3.org/2000/svg';
-  for (let i = 0; i < N_SEG; i++) {
+  for (let i = 0; i < PHYS.N_SEG; i++) {
     const wrap = document.createElementNS(NS, 'g') as SVGGElement;
     for (const rd of segments[i].rects) wrap.appendChild(rd.rect);
     parent.appendChild(wrap);
@@ -273,7 +258,7 @@ function setupChain(): ChainData | null {
     if (el.hasAttribute('data-stretch-cy')) {
       cy = parseFloat(el.getAttribute('data-stretch-cy')!);
     }
-    const segIdx = Math.min(N_SEG - 1, Math.max(0, Math.floor((cy - bodyYmin) / segHeight)));
+    const segIdx = Math.min(PHYS.N_SEG - 1, Math.max(0, Math.floor((cy - bodyYmin) / segHeight)));
     legGroups.push({ el, delta, segIdx });
   }
 
@@ -292,97 +277,58 @@ function applyChain(): void {
 
   for (let i = 0; i < wrappers.length; i++) {
     const ty = i === 0 ? bodyYmin : segHeight;
-    wrappers[i].setAttribute('transform', `translate(${dxState[i].toFixed(3)} ${ty.toFixed(3)})`);
+    wrappers[i].setAttribute('transform', `translate(${phys.dxState[i].toFixed(3)} ${ty.toFixed(3)})`);
   }
 
   for (const ld of lerpData) {
-    const x = ld.startX + (ld.endX - ld.startX) * stretchT;
-    const y = ld.startYLocal + (ld.endYLocal - ld.startYLocal) * stretchT;
+    const x = ld.startX + (ld.endX - ld.startX) * phys.stretchT;
+    const y = ld.startYLocal + (ld.endYLocal - ld.startYLocal) * phys.stretchT;
     setRectXY(ld.rect, x, y, ld.useTransform);
-    ld.rect.setAttribute('width', Math.max(0, ld.startW + (ld.endW - ld.startW) * stretchT).toFixed(3));
-    ld.rect.setAttribute('height', Math.max(0, ld.startH + (ld.endH - ld.startH) * stretchT).toFixed(3));
+    ld.rect.setAttribute('width', Math.max(0, ld.startW + (ld.endW - ld.startW) * phys.stretchT).toFixed(3));
+    ld.rect.setAttribute('height', Math.max(0, ld.startH + (ld.endH - ld.startH) * phys.stretchT).toFixed(3));
   }
 
   for (const lg of legGroups) {
-    const ty = lg.delta * (1 - stretchT);
+    const ty = lg.delta * (1 - phys.stretchT);
     let dx = 0;
-    for (let i = 0; i <= lg.segIdx; i++) dx += dxState[i];
+    for (let i = 0; i <= lg.segIdx; i++) dx += phys.dxState[i];
     lg.el.setAttribute('transform', `translate(${dx.toFixed(3)} ${ty.toFixed(3)})`);
   }
 
   if (tailGroup && tailEndY !== null && tailStartY !== null) {
     let tailDx = 0;
-    for (let i = 0; i < dxState.length; i++) tailDx += dxState[i];
-    const offsetY = (tailStartY - tailEndY) * (1 - stretchT);
+    for (let i = 0; i < phys.dxState.length; i++) tailDx += phys.dxState[i];
+    const offsetY = (tailStartY - tailEndY) * (1 - phys.stretchT);
     tailGroup.setAttribute('transform', `translate(${tailDx.toFixed(3)} ${offsetY.toFixed(2)})`);
   }
 }
 
+let chainIdleApplied = false;
+
 function chainTick(): void {
   if (!chain) return;
-
-  if (dragging && Date.now() - lastDragMoveAt > 80) prevDragDx *= 0.78;
-
-  if (dragging && dragHoldStartAt > 0) {
-    const holdT = Math.min(1, (Date.now() - dragHoldStartAt) / STRETCH_HOLD_MS);
-    stretchT = holdT < 0.5 ? 4 * holdT * holdT * holdT : 1 - Math.pow(-2 * holdT + 2, 3) / 2;
-    stretchT = Math.min(0.32, stretchT);
-  }
-
-  if (releasing) {
-    stretchTVel += (0 - stretchT) * STRETCH_T_SPRING;
-    stretchTVel *= STRETCH_T_DAMP;
-    stretchT += stretchTVel;
-    if (Math.abs(stretchT) < 0.006 && Math.abs(stretchTVel) < 0.005) {
-      stretchT = 0;
-      stretchTVel = 0;
+  if (physicsSettled(phys)) {
+    if (!chainIdleApplied) {
+      applyChain();
+      chainIdleApplied = true;
     }
+    return;
   }
+  chainIdleApplied = false;
 
-  const activePendSpring = dragging ? 0.018 : PEND_SPRING;
-  const activePendDamp = dragging ? 0.86 : PEND_DAMP;
-  pendulumVelAngle += -pendulumAngle * activePendSpring;
-  pendulumVelAngle *= activePendDamp;
-  pendulumAngle += pendulumVelAngle;
-  pendulumAngle = Math.max(-PEND_MAX_DEG, Math.min(PEND_MAX_DEG, pendulumAngle));
-
-  const pendDx = Math.sin((pendulumAngle * Math.PI) / 180) * PEND_MAX_PX;
-  let maxMotion = 0;
-  for (let i = 0; i < N_SEG; i++) {
-    const d = i / (N_SEG - 1);
-    const dPrev = i > 0 ? (i - 1) / (N_SEG - 1) : 0;
-    const relTarget = pendDx * (d * d - dPrev * dPrev);
-    velState[i] += (relTarget - dxState[i]) * SPRING;
-    velState[i] *= DAMPING;
-    dxState[i] = Math.max(-WIGGLE_MAX_DX, Math.min(WIGGLE_MAX_DX, dxState[i] + velState[i]));
-    maxMotion = Math.max(maxMotion, Math.abs(velState[i]));
-  }
-
-  if (dragging && Math.abs(lastWiggleDx) > WIGGLE_MIN_SPEED) {
-    const kick = Math.sign(lastWiggleDx) * Math.pow(Math.abs(lastWiggleDx), 1.3) * WIGGLE_IMPULSE;
-    velState[0] -= kick;
-    lastWiggleDx *= 0.6;
-  }
-
-  const lagMotion = (Math.abs(pendulumAngle) + Math.abs(pendulumVelAngle)) / PEND_MAX_DEG;
+  const releaseComplete = physicsTick(phys, Date.now());
   applyChain();
 
-  if (releasing && stretchT === 0 && stretchTVel === 0 && maxMotion < 0.15 && lagMotion < 0.02) {
-    releasing = false;
-    for (let i = 0; i < N_SEG; i++) { dxState[i] = 0; velState[i] = 0; }
-    pendulumAngle = 0;
-    pendulumVelAngle = 0;
+  if (releaseComplete) {
     applyChain();
-    api.moveWindow(0, -dragLiftPx);
     showPose('idle');
+    api.moveWindow(0, -HEAD_ANCHOR_SHIFT_Y);
     api.ensureOnScreen();
+    syncInteractive();
   }
 }
 
-function updatePupils(): void {
-  const rect = bounceEl.getBoundingClientRect();
-  const faceX = rect.left + rect.width / 2;
-  const faceY = rect.top + rect.height * 0.35;
+function updatePupils(faceX: number, faceY: number): void {
   const dx = cursor.x - faceX;
   const dy = cursor.y - faceY;
   const mag = Math.hypot(dx, dy) || 1;
@@ -390,7 +336,7 @@ function updatePupils(): void {
   let py = (dy / mag) * 1.0;
   if (mood === 'lonely') { px = 0; py = 1; }
   const t = `translate(${px.toFixed(2)}px, ${py.toFixed(2)}px)`;
-  for (const el of poseEls[currentPose].querySelectorAll<SVGElement>('.pupil-left, .pupil-right')) {
+  for (const el of pupilEls[currentPose]) {
     el.style.transform = t;
   }
 }
@@ -402,9 +348,13 @@ let lastKneadFlip = 0;
 function frame(): void {
   const now = performance.now();
 
+  const rect = bounceEl.getBoundingClientRect();
+  const faceX = rect.left + rect.width / 2;
+  const faceY = rect.top + rect.height * 0.35;
+
   chainTick();
 
-  if (dragging || releasing) {
+  if (phys.dragging || phys.releasing) {
     showPose('drag');
   } else if (typingRate >= KNEAD_MIN) {
     const kneadMs = 1000 / (2.4 + heat() * 4.4);
@@ -420,14 +370,19 @@ function frame(): void {
   stage.classList.toggle('hot', heat() > 0.8);
   stage.classList.toggle('excited', Date.now() < excitedUntil);
 
-  updatePupils();
+  updatePupils(faceX, faceY);
   requestAnimationFrame(frame);
 }
 
 document.documentElement.style.setProperty('--eye-color', '#0a0a0a');
 
+let lastBodyColor = '';
 setInterval(() => {
-  document.documentElement.style.setProperty('--cat-color', bodyColor());
+  const c = bodyColor();
+  if (c !== lastBodyColor) {
+    lastBodyColor = c;
+    document.documentElement.style.setProperty('--cat-color', c);
+  }
 }, 150);
 
 (function blinkLoop() {
@@ -451,29 +406,29 @@ function applyMood(): void {
 
 const DRAG_START_THRESHOLD_PX = 4;
 
-let dragLiftPx = 196;
-function measureDragLift(): number {
-  const idleEl = poseEls.idle;
-  const dragEl = poseEls.drag;
-  const idleWasVisible = idleEl.classList.contains('visible');
-  const dragWasVisible = dragEl.classList.contains('visible');
-  idleEl.classList.add('visible');
-  dragEl.classList.add('visible');
-  const idlePup = idleEl.querySelector<SVGGraphicsElement>('.pupil-left');
-  const dragPup = dragEl.querySelector<SVGGraphicsElement>('.pupil-left');
-  let lift = dragLiftPx;
-  if (idlePup && dragPup) {
-    lift = idlePup.getBoundingClientRect().top - dragPup.getBoundingClientRect().top;
-  }
-  if (!idleWasVisible) idleEl.classList.remove('visible');
-  if (!dragWasVisible) dragEl.classList.remove('visible');
-  return lift;
-}
-
-let pointerDown = false;
 let downAt = 0;
 let lastX = 0, lastY = 0;
 let downX = 0, downY = 0;
+
+let interactive = false;
+function setInteractive(v: boolean): void {
+  if (v === interactive) return;
+  interactive = v;
+  api.setIgnoreMouseEvents(!v);
+}
+
+function overInteractive(x: number, y: number): boolean {
+  const el = document.elementFromPoint(x, y);
+  return !!el && (stage.contains(el) || popup.contains(el));
+}
+
+function syncInteractive(): void {
+  if (pointerDown) {
+    setInteractive(true);
+    return;
+  }
+  setInteractive(overInteractive(cursor.x, cursor.y));
+}
 
 stage.addEventListener('pointerdown', (e) => {
   stage.setPointerCapture(e.pointerId);
@@ -489,27 +444,18 @@ stage.addEventListener('pointermove', (e) => {
   cursor = { x: e.clientX, y: e.clientY };
   if (!pointerDown) return;
   const moved = Math.hypot(e.screenX - downX, e.screenY - downY);
-  if (!dragging && moved > DRAG_START_THRESHOLD_PX) {
-    dragging = true;
-    releasing = false;
-    dragHoldStartAt = Date.now();
-    prevDragDx = 0;
-    lastWiggleDx = 0;
+  if (!phys.dragging && moved > DRAG_START_THRESHOLD_PX) {
+    physicsStartDrag(phys, Date.now());
     hidePopup();
     showPose('drag');
-    api.moveWindow(0, dragLiftPx);
+    api.moveWindow(0, HEAD_ANCHOR_SHIFT_Y);
   }
-  if (!dragging) return;
+  if (!phys.dragging) return;
   const dx = e.screenX - lastX;
   const dy = e.screenY - lastY;
   if (dx !== 0 || dy !== 0) {
-    lastDragMoveAt = Date.now();
     api.moveWindow(dx, dy);
-    const delta = dx - prevDragDx;
-    const scaledDelta = Math.sign(delta) * Math.pow(Math.abs(delta), 2.2) * PEND_IMPULSE;
-    pendulumVelAngle -= scaledDelta;
-    lastWiggleDx = dx;
-    prevDragDx = dx;
+    physicsDragImpulse(phys, dx, Date.now());
     lastX = e.screenX;
     lastY = e.screenY;
   }
@@ -518,24 +464,53 @@ stage.addEventListener('pointermove', (e) => {
 function endPointer(wasCancelled: boolean): void {
   if (!pointerDown) return;
   pointerDown = false;
-  if (dragging) {
-    dragging = false;
-    releasing = true;
-    lastWiggleDx = 0;
+  if (phys.dragging) {
+    physicsEndDrag(phys);
   } else if (!wasCancelled && Date.now() - downAt < 350) {
     togglePopup();
   }
+  syncInteractive();
 }
 
 stage.addEventListener('pointerup', () => endPointer(false));
 stage.addEventListener('pointercancel', () => endPointer(true));
 stage.addEventListener('lostpointercapture', () => endPointer(true));
 
+for (const el of [stage, popup]) {
+  el.addEventListener('mouseenter', () => setInteractive(true));
+  el.addEventListener('mouseleave', () => syncInteractive());
+}
+
 let popupMode: 'note' | 'reflection' = 'note';
+
+const POPUP_W = 300;
+const POPUP_MAX_H = 300;
+const POPUP_EDGE_PAD = 8;
+const POPUP_DEFAULT_BOTTOM = 180;
+
+function positionPopup(): void {
+  api.getOverhang().then((o) => {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const maxH = Math.min(POPUP_MAX_H, H - o.top - POPUP_EDGE_PAD * 2);
+    const bottom = Math.max(
+      o.bottom + 4,
+      Math.min(POPUP_DEFAULT_BOTTOM, H - o.top - POPUP_EDGE_PAD - maxH)
+    );
+    const left = Math.max(
+      o.left + POPUP_EDGE_PAD,
+      Math.min((W - POPUP_W) / 2, W - o.right - POPUP_W - POPUP_EDGE_PAD)
+    );
+    popup.style.maxHeight = `${maxH}px`;
+    popup.style.bottom = `${bottom}px`;
+    popup.style.left = `${left}px`;
+  });
+}
 
 function showPopup(mode: 'note' | 'reflection'): void {
   popupMode = mode;
   popup.classList.add('visible');
+  positionPopup();
   if (mode === 'reflection') {
     popupTitle.textContent = "Today's recap — how was your day?";
     noteInput.placeholder = 'Write your evening reflection…';
@@ -588,12 +563,17 @@ function save(): void {
 }
 
 saveBtn.addEventListener('click', save);
+document.getElementById('closeBtn')!.addEventListener('click', hidePopup);
 noteInput.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save();
   if (e.key === 'Escape') hidePopup();
 });
 
-api.onCursor((p) => { if (!pointerDown) cursor = p; });
+api.onCursor((p) => {
+  if (pointerDown) return;
+  cursor = p;
+  if (interactive) syncInteractive();
+});
 api.onTypingRate((r) => { typingRate = r; });
 api.onMood((m) => { mood = m as Mood; applyMood(); });
 api.onReminder((info) => {
@@ -608,5 +588,4 @@ api.onTypingUnavailable((msg) => {
 
 chain = setupChain();
 applyChain();
-dragLiftPx = measureDragLift();
 requestAnimationFrame(frame);
