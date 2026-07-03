@@ -1,12 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import * as fs from 'fs';
-import * as path from 'path';
 
 contextBridge.exposeInMainWorld('petApi', {
-  readAsset: (name: string): string => {
-    const safe = path.basename(name);
-    return fs.readFileSync(path.join(__dirname, '..', '..', 'assets', 'cat', safe), 'utf8');
-  },
+  readAsset: (name: string): string => ipcRenderer.sendSync('read-asset', name),
   onCursor: (cb: (p: { x: number; y: number }) => void) =>
     ipcRenderer.on('cursor', (_e, p) => cb(p)),
   onTypingRate: (cb: (rate: number) => void) =>

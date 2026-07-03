@@ -20,6 +20,16 @@ function dateKey(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+function isEntry(e: unknown): e is Entry {
+  if (!e || typeof e !== 'object') return false;
+  const c = e as Record<string, unknown>;
+  return (
+    typeof c.time === 'string' &&
+    typeof c.text === 'string' &&
+    (c.type === 'note' || c.type === 'reflection')
+  );
+}
+
 export class Storage {
   private dir: string;
 
@@ -32,19 +42,38 @@ export class Storage {
     return path.join(this.dir, `${key}.json`);
   }
 
+  private atomicWrite(file: string, data: string): void {
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, file);
+  }
+
+  private quarantine(file: string): void {
+    try {
+      fs.renameSync(file, `${file}.corrupt-${Date.now()}`);
+    } catch {
+    }
+  }
+
   getToday(): DayLog {
     const key = dateKey();
+    const file = this.jsonPath(key);
+    if (!fs.existsSync(file)) return { date: key, entries: [] };
     try {
-      return JSON.parse(fs.readFileSync(this.jsonPath(key), 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) {
+        return { date: key, entries: parsed.entries.filter(isEntry) };
+      }
     } catch {
-      return { date: key, entries: [] };
     }
+    this.quarantine(file);
+    return { date: key, entries: [] };
   }
 
   addEntry(text: string, type: 'note' | 'reflection'): DayLog {
     const log = this.getToday();
     log.entries.push({ time: new Date().toISOString(), text: text.trim(), type });
-    fs.writeFileSync(this.jsonPath(log.date), JSON.stringify(log, null, 2));
+    this.atomicWrite(this.jsonPath(log.date), JSON.stringify(log, null, 2));
     this.writeMarkdown(log);
     return log;
   }
@@ -66,6 +95,6 @@ export class Storage {
       lines.push('## Evening reflection', '');
       for (const e of reflections) lines.push(e.text, '');
     }
-    fs.writeFileSync(path.join(this.dir, `${log.date}.md`), lines.join('\n'));
+    this.atomicWrite(path.join(this.dir, `${log.date}.md`), lines.join('\n'));
   }
 }
