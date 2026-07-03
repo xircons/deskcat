@@ -10,6 +10,8 @@ interface PetApi {
   getToday(): Promise<{ date: string; entries: { time: string; text: string; type: string }[] }>;
   moveWindow(dx: number, dy: number): void;
   ensureOnScreen(): void;
+  getOverhang(): Promise<{ left: number; right: number; top: number; bottom: number }>;
+  setIgnoreMouseEvents(ignore: boolean): void;
 }
 const api = (window as unknown as { petApi: PetApi }).petApi;
 
@@ -92,8 +94,8 @@ const N_SEG = 16;
 const SPRING = 0.038;
 const DAMPING = 0.93;
 const STRETCH_HOLD_MS = 1600;
-const STRETCH_T_SPRING = 0.13;
-const STRETCH_T_DAMP = 0.78;
+const STRETCH_T_SPRING = 0.24;
+const STRETCH_T_DAMP = 0.68;
 const PEND_SPRING = 0.003;
 const PEND_DAMP = 0.962;
 const PEND_IMPULSE = 0.065;
@@ -102,6 +104,8 @@ const PEND_MAX_PX = 22;
 const WIGGLE_IMPULSE = 0.008;
 const WIGGLE_MIN_SPEED = 6;
 const WIGGLE_MAX_DX = 2.5;
+
+const HEAD_ANCHOR_SHIFT_Y = 235.5;
 
 let stretchT = 0;
 let stretchTVel = 0;
@@ -339,8 +343,8 @@ function chainTick(): void {
     }
   }
 
-  const activePendSpring = dragging ? 0.018 : PEND_SPRING;
-  const activePendDamp = dragging ? 0.86 : PEND_DAMP;
+  const activePendSpring = dragging ? 0.018 : releasing ? 0.05 : PEND_SPRING;
+  const activePendDamp = dragging ? 0.86 : releasing ? 0.72 : PEND_DAMP;
   pendulumVelAngle += -pendulumAngle * activePendSpring;
   pendulumVelAngle *= activePendDamp;
   pendulumAngle += pendulumVelAngle;
@@ -367,14 +371,16 @@ function chainTick(): void {
   const lagMotion = (Math.abs(pendulumAngle) + Math.abs(pendulumVelAngle)) / PEND_MAX_DEG;
   applyChain();
 
-  if (releasing && stretchT === 0 && stretchTVel === 0 && maxMotion < 0.15 && lagMotion < 0.02) {
+  if (releasing && stretchT < 0.02 && lagMotion < 0.12) {
     releasing = false;
+    stretchT = 0;
+    stretchTVel = 0;
     for (let i = 0; i < N_SEG; i++) { dxState[i] = 0; velState[i] = 0; }
     pendulumAngle = 0;
     pendulumVelAngle = 0;
     applyChain();
-    api.moveWindow(0, -dragLiftPx);
     showPose('idle');
+    api.moveWindow(0, -HEAD_ANCHOR_SHIFT_Y);
     api.ensureOnScreen();
   }
 }
@@ -451,25 +457,6 @@ function applyMood(): void {
 
 const DRAG_START_THRESHOLD_PX = 4;
 
-let dragLiftPx = 196;
-function measureDragLift(): number {
-  const idleEl = poseEls.idle;
-  const dragEl = poseEls.drag;
-  const idleWasVisible = idleEl.classList.contains('visible');
-  const dragWasVisible = dragEl.classList.contains('visible');
-  idleEl.classList.add('visible');
-  dragEl.classList.add('visible');
-  const idlePup = idleEl.querySelector<SVGGraphicsElement>('.pupil-left');
-  const dragPup = dragEl.querySelector<SVGGraphicsElement>('.pupil-left');
-  let lift = dragLiftPx;
-  if (idlePup && dragPup) {
-    lift = idlePup.getBoundingClientRect().top - dragPup.getBoundingClientRect().top;
-  }
-  if (!idleWasVisible) idleEl.classList.remove('visible');
-  if (!dragWasVisible) dragEl.classList.remove('visible');
-  return lift;
-}
-
 let pointerDown = false;
 let downAt = 0;
 let lastX = 0, lastY = 0;
@@ -497,7 +484,7 @@ stage.addEventListener('pointermove', (e) => {
     lastWiggleDx = 0;
     hidePopup();
     showPose('drag');
-    api.moveWindow(0, dragLiftPx);
+    api.moveWindow(0, HEAD_ANCHOR_SHIFT_Y);
   }
   if (!dragging) return;
   const dx = e.screenX - lastX;
@@ -531,11 +518,51 @@ stage.addEventListener('pointerup', () => endPointer(false));
 stage.addEventListener('pointercancel', () => endPointer(true));
 stage.addEventListener('lostpointercapture', () => endPointer(true));
 
+let hoveringInteractive = 0;
+function enterInteractive(): void {
+  hoveringInteractive++;
+  if (hoveringInteractive === 1) api.setIgnoreMouseEvents(false);
+}
+function leaveInteractive(): void {
+  if (pointerDown) return;
+  hoveringInteractive = Math.max(0, hoveringInteractive - 1);
+  if (hoveringInteractive === 0) api.setIgnoreMouseEvents(true);
+}
+for (const el of [stage, popup]) {
+  el.addEventListener('mouseenter', enterInteractive);
+  el.addEventListener('mouseleave', leaveInteractive);
+}
+
 let popupMode: 'note' | 'reflection' = 'note';
+
+const POPUP_W = 300;
+const POPUP_MAX_H = 300;
+const POPUP_EDGE_PAD = 8;
+const POPUP_DEFAULT_BOTTOM = 180;
+
+function positionPopup(): void {
+  api.getOverhang().then((o) => {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const maxH = Math.min(POPUP_MAX_H, H - o.top - POPUP_EDGE_PAD * 2);
+    const bottom = Math.max(
+      o.bottom + 4,
+      Math.min(POPUP_DEFAULT_BOTTOM, H - o.top - POPUP_EDGE_PAD - maxH)
+    );
+    const left = Math.max(
+      o.left + POPUP_EDGE_PAD,
+      Math.min((W - POPUP_W) / 2, W - o.right - POPUP_W - POPUP_EDGE_PAD)
+    );
+    popup.style.maxHeight = `${maxH}px`;
+    popup.style.bottom = `${bottom}px`;
+    popup.style.left = `${left}px`;
+  });
+}
 
 function showPopup(mode: 'note' | 'reflection'): void {
   popupMode = mode;
   popup.classList.add('visible');
+  positionPopup();
   if (mode === 'reflection') {
     popupTitle.textContent = "Today's recap — how was your day?";
     noteInput.placeholder = 'Write your evening reflection…';
@@ -588,6 +615,7 @@ function save(): void {
 }
 
 saveBtn.addEventListener('click', save);
+document.getElementById('closeBtn')!.addEventListener('click', hidePopup);
 noteInput.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save();
   if (e.key === 'Escape') hidePopup();
@@ -608,5 +636,4 @@ api.onTypingUnavailable((msg) => {
 
 chain = setupChain();
 applyChain();
-dragLiftPx = measureDragLift();
 requestAnimationFrame(frame);

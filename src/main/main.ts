@@ -8,6 +8,9 @@ let win: BrowserWindow | null = null;
 let cfg: Config;
 const storage = new Storage();
 
+const CAT_SIDE_MARGIN = 160;
+const CAT_TOP_MARGIN = 330;
+
 type Mood = 'content' | 'lonely' | 'grumpy';
 
 let entrySinceReminder = true;
@@ -28,7 +31,7 @@ function sendMood(): void {
 
 function createWindow(): void {
   win = new BrowserWindow({
-    width: 340,
+    width: 480,
     height: 500,
     transparent: true,
     frame: false,
@@ -46,10 +49,11 @@ function createWindow(): void {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setIgnoreMouseEvents(true, { forward: true });
   win.loadFile(path.join(app.getAppPath(), 'src', 'renderer', 'index.html'));
 
   const { workArea } = screen.getPrimaryDisplay();
-  win.setPosition(workArea.x + workArea.width - 380, workArea.y + workArea.height - 580);
+  win.setPosition(workArea.x + 40 - CAT_SIDE_MARGIN, workArea.y + workArea.height - 500);
 }
 
 const firedToday = new Map<string, string>();
@@ -148,11 +152,30 @@ ipcMain.on('move-window', (_e, { dx, dy }: { dx: number; dy: number }) => {
   safeSetPosition(x + dx, y + dy);
 });
 
+ipcMain.on('set-ignore-mouse-events', (_e, ignore: boolean) => {
+  win?.setIgnoreMouseEvents(ignore, { forward: true });
+});
+
+ipcMain.handle('get-overhang', () => {
+  if (!win) return { left: 0, right: 0, top: 0, bottom: 0 };
+  const b = win.getBounds();
+  const wa = screen.getDisplayMatching(b).workArea;
+  return {
+    left: Math.max(0, wa.x - b.x),
+    right: Math.max(0, b.x + b.width - (wa.x + wa.width)),
+    top: Math.max(0, wa.y - b.y),
+    bottom: Math.max(0, b.y + b.height - (wa.y + wa.height)),
+  };
+});
+
 ipcMain.on('ensure-on-screen', () => {
   if (!win) return;
   const b = win.getBounds();
   const wa = screen.getDisplayMatching(b).workArea;
-  const x = Math.min(Math.max(b.x, wa.x), wa.x + wa.width - b.width);
-  const y = Math.min(Math.max(b.y, wa.y), wa.y + wa.height - b.height);
+  const x = Math.min(
+    Math.max(b.x, wa.x - CAT_SIDE_MARGIN),
+    wa.x + wa.width - b.width + CAT_SIDE_MARGIN
+  );
+  const y = Math.min(Math.max(b.y, wa.y - CAT_TOP_MARGIN), wa.y + wa.height - b.height);
   if (x !== b.x || y !== b.y) safeSetPosition(x, y);
 });

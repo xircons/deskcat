@@ -21,4 +21,6 @@ contextBridge.exposeInMainWorld('petApi', {
   getToday: () => ipcRenderer.invoke('get-today'),
   moveWindow: (dx: number, dy: number) => ipcRenderer.send('move-window', { dx, dy }),
   ensureOnScreen: () => ipcRenderer.send('ensure-on-screen'),
+  getOverhang: () => ipcRenderer.invoke('get-overhang'),
+  setIgnoreMouseEvents: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse-events', ignore),
 });
