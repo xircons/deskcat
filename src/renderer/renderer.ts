@@ -911,15 +911,6 @@ settingsSaveBtn.addEventListener('click', () => {
     });
 });
 
-const settingsTestReminderBtn = document.getElementById('settingsTestReminderBtn');
-if (settingsTestReminderBtn) {
-  settingsTestReminderBtn.addEventListener('click', () => {
-    excitedUntil = Date.now() + 4000;
-    const now = new Date();
-    const t = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    showPopup('reminder-note', t);
-  });
-}
 
 function save(): void {
   const text = noteInput.value.trim();
