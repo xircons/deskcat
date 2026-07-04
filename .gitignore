@@ -43,6 +43,7 @@ coverage/
 .vscode/
 .claude/
 .agents/
+claude.md
 *.suo
 *.ntvs*
 *.njsproj
