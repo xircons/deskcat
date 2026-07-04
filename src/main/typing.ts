@@ -1,9 +1,12 @@
 export function startTypingMonitor(
   onRate: (keysPerSecond: number) => void,
-  onUnavailable: (reason: string) => void
+  onUnavailable: (reason: string) => void,
+  onScrollRate?: (eventsPerSecond: number) => void
 ): () => void {
   const timestamps: number[] = [];
+  const scrollTimestamps: number[] = [];
   const WINDOW_MS = 4000;
+  const SCROLL_WINDOW_MS = 1000;
   let hook: { stop(): void } | null = null;
 
   try {
@@ -11,6 +14,12 @@ export function startTypingMonitor(
     uIOhook.on('keydown', () => {
       try {
         timestamps.push(Date.now());
+      } catch {
+      }
+    });
+    uIOhook.on('wheel', () => {
+      try {
+        scrollTimestamps.push(Date.now());
       } catch {
       }
     });
@@ -39,9 +48,13 @@ export function startTypingMonitor(
   }
 
   const interval = setInterval(() => {
-    const cutoff = Date.now() - WINDOW_MS;
+    const now = Date.now();
+    const cutoff = now - WINDOW_MS;
     while (timestamps.length && timestamps[0] < cutoff) timestamps.shift();
     onRate(timestamps.length / (WINDOW_MS / 1000));
+    const scrollCutoff = now - SCROLL_WINDOW_MS;
+    while (scrollTimestamps.length && scrollTimestamps[0] < scrollCutoff) scrollTimestamps.shift();
+    onScrollRate?.(scrollTimestamps.length / (SCROLL_WINDOW_MS / 1000));
   }, 250);
 
   return () => {

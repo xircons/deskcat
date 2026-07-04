@@ -1,16 +1,51 @@
 {
   "name": "daily-pet",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A pixel cat that floats on your screen and helps you jot notes for your daily reflection.",
+  "author": "pppwtk <admin@turnpro.dev>",
   "main": "dist/main/main.js",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xircons/deskcat.git"
+  },
   "scripts": {
     "build": "tsc",
     "start": "npm run build && electron .",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "dist": "npm run build && electron-builder --mac"
+  },
+  "build": {
+    "appId": "dev.turnpro.deskcat",
+    "productName": "DeskCat",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "assets/**/*",
+      "config.json",
+      "src/renderer/index.html"
+    ],
+    "asarUnpack": [
+      "**/node_modules/uiohook-napi/**"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "icon": "assets/cat/assets/catjang-logo.png"
+    },
+    "win": {
+      "icon": "assets/cat/assets/catjang-logo.ico"
+    },
+    "publish": {
+      "provider": "github"
+    }
   },
   "devDependencies": {
     "electron": "^31.3.0",
+    "electron-builder": "^24.13.3",
     "typescript": "^5.5.4",
     "@types/node": "^20.14.0"
   },

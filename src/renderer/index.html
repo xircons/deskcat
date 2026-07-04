@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'" />
   <style>
-    html, body {
+    html,
+    body {
       margin: 0;
       padding: 0;
       background: transparent;
@@ -22,6 +24,7 @@
       height: 170px;
       cursor: grab;
     }
+
     #cat-elastic {
       position: absolute;
       left: 50%;
@@ -32,22 +35,44 @@
       transform-origin: 50% 100%;
       will-change: transform;
     }
-    #cat-bounce { width: 100%; height: 100%; }
+
+    #cat-bounce {
+      width: 100%;
+      height: 100%;
+    }
+
     #cat-stage.excited #cat-bounce {
       animation: pet-bounce 0.45s ease-in-out infinite;
       transform-origin: 50% 100%;
     }
+
     @keyframes pet-bounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-16px); }
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-16px);
+      }
     }
+
     .pose {
       position: absolute;
       inset: 0;
       display: none;
     }
-    .pose.visible { display: block; }
-    .pose svg { width: 100%; height: 100%; }
+
+    .pose.visible {
+      display: block;
+    }
+
+    .pose svg {
+      width: 100%;
+      height: 100%;
+    }
+
     .pose.pose-drag {
       position: absolute;
       inset: auto;
@@ -59,34 +84,128 @@
       cursor: grabbing;
     }
 
-    .stm { opacity: 0; }
-    #cat-stage.hot .stm { animation: pet-steam 1.5s ease-out infinite; }
-    #cat-stage.hot .s2 { animation-delay: 0.45s; }
-    #cat-stage.hot .s3 { animation-delay: 0.9s; }
+    .pose.pose-jump {
+      inset: auto;
+      left: 50%;
+      bottom: 0;
+      width: 120px;
+      height: 186px;
+      margin-left: -60px;
+    }
+
+    .pose.pose-spd {
+      inset: auto;
+      left: 50%;
+      bottom: -30px;
+      width: 216px;
+      height: 168px;
+      margin-left: -96px;
+    }
+
+    .pose.pose-spi {
+      inset: auto;
+      left: 50%;
+      bottom: -19px;
+      width: 168px;
+      height: 168px;
+      margin-left: -80px;
+    }
+
+    #cat-stage.jumping #cat-bounce {
+      animation: cat-jump 0.62s cubic-bezier(0.34, 0.1, 0.3, 1);
+      transform-origin: 50% 100%;
+    }
+
+    @keyframes cat-jump {
+
+      0%,
+      26% {
+        transform: translateY(0);
+      }
+
+      30% {
+        transform: translateY(-8px);
+      }
+
+      55% {
+        transform: translateY(-46px);
+      }
+
+      82% {
+        transform: translateY(-4px);
+      }
+
+      100% {
+        transform: translateY(0);
+      }
+    }
+
+    .stm {
+      opacity: 0;
+    }
+
+    #cat-stage.hot .stm {
+      animation: pet-steam 1.5s ease-out infinite;
+    }
+
+    #cat-stage.hot .s2 {
+      animation-delay: 0.45s;
+    }
+
+    #cat-stage.hot .s3 {
+      animation-delay: 0.9s;
+    }
+
     @keyframes pet-steam {
-      0% { opacity: 0; transform: translateY(0); }
-      25% { opacity: 0.85; }
-      100% { opacity: 0; transform: translateY(-7px); }
+      0% {
+        opacity: 0;
+        transform: translateY(0);
+      }
+
+      25% {
+        opacity: 0.85;
+      }
+
+      100% {
+        opacity: 0;
+        transform: translateY(-7px);
+      }
     }
 
     #cat-stage.lonely .eye-l-blink,
-    #cat-stage.lonely .eye-r-blink { transform: scaleY(0.45); }
-    #cat-stage.lonely [id$="-ear-left"] {
-      transform: rotate(-16deg); transform-origin: 8px 10px;
-    }
-    #cat-stage.lonely [id$="-ear-right"] {
-      transform: rotate(16deg); transform-origin: 20px 10px;
-    }
-    .brow { opacity: 0; }
-    #cat-stage.grumpy .brow { opacity: 1; }
-    #cat-stage.grumpy [id$="-ear-left"] {
-      transform: scaleY(0.5); transform-origin: 8px 10px;
-    }
-    #cat-stage.grumpy [id$="-ear-right"] {
-      transform: scaleY(0.5); transform-origin: 20px 10px;
+    #cat-stage.lonely .eye-r-blink {
+      transform: scaleY(0.45);
     }
 
-    #popup {
+    #cat-stage.lonely [id$="-ear-left"] {
+      transform: rotate(-16deg);
+      transform-origin: 8px 10px;
+    }
+
+    #cat-stage.lonely [id$="-ear-right"] {
+      transform: rotate(16deg);
+      transform-origin: 20px 10px;
+    }
+
+    .brow {
+      opacity: 0;
+    }
+
+    #cat-stage.grumpy .brow {
+      opacity: 1;
+    }
+
+    #cat-stage.grumpy [id$="-ear-left"] {
+      transform: rotate(-35deg) translateY(1px);
+      transform-origin: 8px 10px;
+    }
+
+    #cat-stage.grumpy [id$="-ear-right"] {
+      transform: rotate(35deg) translateY(1px);
+      transform-origin: 20px 10px;
+    }
+
+    .panel {
       position: absolute;
       bottom: 180px;
       left: 90px;
@@ -100,9 +219,18 @@
       flex-direction: column;
       font-family: 'Menlo', 'Courier New', monospace;
       image-rendering: pixelated;
+      z-index: 10;
     }
-    #popup.visible { display: flex; }
-    #popupHeader {
+
+    .panel.visible {
+      display: flex;
+    }
+
+    body.dragging .panel {
+      visibility: hidden;
+    }
+
+    .panel-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -110,14 +238,16 @@
       padding: 6px 8px;
       flex-shrink: 0;
     }
-    #popup h3 {
+
+    .panel h3 {
       margin: 0;
       font-size: 11px;
       color: #fff;
       text-transform: uppercase;
       letter-spacing: 1.5px;
     }
-    #closeBtn {
+
+    .panel-close {
       width: 18px;
       height: 18px;
       padding: 0;
@@ -130,48 +260,146 @@
       line-height: 1;
       cursor: pointer;
     }
-    #closeBtn:hover { background: #fff; color: #d94f3d; border-color: #d94f3d; }
-    #popupBody {
+
+    .panel-close:hover {
+      background: #fff;
+      color: #d94f3d;
+      border-color: #d94f3d;
+    }
+
+    .panel-body {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      padding: 10px;
-      overflow: hidden;
+      padding: 10px 16px 10px 10px;
+      overflow-y: overlay;
       min-height: 0;
     }
-    #entries {
+
+    .panel-body::-webkit-scrollbar,
+    .entries-list::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    .panel-body::-webkit-scrollbar-track,
+    .entries-list::-webkit-scrollbar-track {
+      background: #e6e2d5;
+    }
+
+    .panel-body::-webkit-scrollbar-thumb,
+    .entries-list::-webkit-scrollbar-thumb {
+      background: #1a1a1a;
+      border: 2px solid #e6e2d5;
+    }
+
+    .panel-body::-webkit-scrollbar-thumb:hover,
+    .entries-list::-webkit-scrollbar-thumb:hover {
+      background: #d94f3d;
+    }
+
+    .entries-list {
       overflow-y: auto;
-      max-height: 110px;
       font-size: 11px;
       color: #1a1a1a;
       border: 2px dashed #b9b4a4;
       padding: 6px;
+    }
+
+    .entries-list .entry {
+      margin-bottom: 5px;
+      line-height: 1.4;
+    }
+
+    .entries-list .entry .t {
+      color: #8a8574;
+      font-variant-numeric: tabular-nums;
+      margin-right: 5px;
+    }
+
+    .entries-list .entry .tag {
+      background: #d94f3d;
+      color: #fff;
+      font-size: 8px;
+      padding: 0 3px;
+      margin-right: 4px;
+      text-transform: uppercase;
+    }
+
+    #entries {
+      max-height: 110px;
       display: none;
     }
-    #entries.visible { display: block; flex: 0 1 auto; min-height: 38px; }
-    #noteInput, #popupFooter { flex-shrink: 0; }
-    #entries .entry { margin-bottom: 5px; line-height: 1.4; }
-    #entries .entry .t { color: #8a8574; font-variant-numeric: tabular-nums; margin-right: 5px; }
-    #noteInput {
-      width: 100%;
+
+    #entries.visible {
+      display: block;
+      flex: 0 1 auto;
+      min-height: 38px;
+    }
+
+    #noteInput,
+    .panel-footer {
+      flex-shrink: 0;
+    }
+
+    .pix-input {
       box-sizing: border-box;
-      min-height: 58px;
-      resize: none;
       border: 2px solid #1a1a1a;
       border-radius: 0;
       background: #ffffff;
-      padding: 7px;
+      padding: 5px 7px;
       font-size: 12px;
       font-family: inherit;
       color: #1a1a1a;
       outline: none;
       box-shadow: inset 2px 2px 0 rgba(26, 26, 26, 0.12);
     }
-    #noteInput:focus { border-color: #d94f3d; }
-    #noteInput::placeholder { color: #a39e8d; }
-    #popupFooter { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    #hint { font-size: 9px; color: #8a8574; line-height: 1.3; }
-    #saveBtn {
+
+    .pix-input:focus {
+      border-color: #d94f3d;
+    }
+
+    .pix-input::placeholder {
+      color: #a39e8d;
+    }
+
+    #noteInput {
+      width: 100%;
+      min-height: 58px;
+      resize: none;
+      padding: 7px;
+    }
+
+    .panel-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hint {
+      font-size: 9px;
+      color: #8a8574;
+      line-height: 1.3;
+    }
+
+    .hint.error {
+      color: #d94f3d;
+    }
+
+    .hint.ok {
+      color: #4a7d3a;
+    }
+
+    #settingsPanel .panel-footer {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    #settingsSaveBtn {
+      width: 100%;
+    }
+
+    .pix-btn {
       background: #d94f3d;
       color: #fff;
       border: 2px solid #1a1a1a;
@@ -186,11 +414,139 @@
       cursor: pointer;
       flex-shrink: 0;
     }
-    #saveBtn:hover { background: #e8654f; }
-    #saveBtn:active {
+
+    .pix-btn:hover {
+      background: #e8654f;
+    }
+
+    .pix-btn:active {
       transform: translate(3px, 3px);
       box-shadow: none;
     }
+
+    .pix-btn:disabled {
+      background: #b9b4a4;
+      cursor: default;
+      transform: none;
+      box-shadow: 3px 3px 0 #1a1a1a;
+    }
+
+    .nav-btn {
+      padding: 2px 8px;
+      font-size: 10px;
+    }
+
+    .day-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    #dayLabel {
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      color: #1a1a1a;
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-style: dashed;
+    }
+
+    #dayPicker {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 100px;
+      height: 100%;
+      margin-left: -50px;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    #dayEntries {
+      min-height: 60px;
+      max-height: 190px;
+    }
+
+    .form-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .form-col {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .form-row label,
+    .form-col label {
+      font-size: 10px;
+      color: #1a1a1a;
+    }
+
+    .form-row .pix-input {
+      width: 110px;
+      font-size: 11px;
+    }
+
+    .form-row input[type="time"] {
+      width: 90px;
+    }
+
+    input[type="time"]::-webkit-calendar-picker-indicator {
+      display: none;
+    }
+
+    input[type="time"]::-webkit-datetime-edit-hour-field:focus,
+    input[type="time"]::-webkit-datetime-edit-minute-field:focus,
+    input[type="time"]::-webkit-datetime-edit-ampm-field:focus {
+      background: #d94f3d;
+      color: #fff;
+    }
+
+    .pix-input::selection {
+      background: #d94f3d;
+      color: #fff;
+    }
+
+    .form-col .pix-input {
+      width: 100%;
+      font-size: 11px;
+    }
+
+    .form-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #d94f3d;
+    }
+
+    .form-sep {
+      font-size: 9px;
+      font-weight: bold;
+      color: #8a8574;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      border-bottom: 2px dashed #b9b4a4;
+      padding-bottom: 3px;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    #notesDir {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     #toast {
       position: absolute;
       bottom: 155px;
@@ -206,29 +562,110 @@
       padding: 8px 10px;
       display: none;
     }
-    #toast.visible { display: block; }
+
+    #toast.visible {
+      display: block;
+    }
   </style>
 </head>
+
 <body>
-  <div id="popup">
-    <div id="popupHeader">
+  <div id="popup" class="panel">
+    <div class="panel-header">
       <h3 id="popupTitle">Quick note</h3>
-      <button id="closeBtn" title="Close (Esc)">✕</button>
+      <button class="panel-close" title="Close (Esc)">✕</button>
     </div>
-    <div id="popupBody">
-      <div id="entries"></div>
-      <textarea id="noteInput" placeholder="What just happened?"></textarea>
-      <div id="popupFooter">
-        <span id="hint">⌘/Ctrl+Enter save · Esc close</span>
-        <button id="saveBtn">Save</button>
+    <div class="panel-body">
+      <div id="entries" class="entries-list"></div>
+      <textarea id="noteInput" class="pix-input" placeholder="What just happened?"></textarea>
+      <div class="panel-footer">
+        <span class="hint">⌘/Ctrl+Enter save · Esc close</span>
+        <button id="saveBtn" class="pix-btn">Save</button>
+      </div>
+    </div>
+  </div>
+  <div id="notesPanel" class="panel">
+    <div class="panel-header">
+      <h3>Notes</h3>
+      <button class="panel-close" title="Close (Esc)">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="day-nav">
+        <button id="prevDay" class="pix-btn nav-btn">&lt;</button>
+        <span id="dayLabel"></span>
+        <input type="date" id="dayPicker" />
+        <button id="nextDay" class="pix-btn nav-btn">&gt;</button>
+      </div>
+      <div id="dayEntries" class="entries-list"></div>
+    </div>
+  </div>
+  <div id="settingsPanel" class="panel">
+    <div class="panel-header">
+      <h3>Settings</h3>
+      <button class="panel-close" title="Close (Esc)">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="form-col">
+        <label for="setReminders">Reminder times (HH:MM, comma separated)</label>
+        <input id="setReminders" class="pix-input" type="text" placeholder="11:30, 14:30, 17:00" />
+      </div>
+      <div class="form-row">
+        <label for="setReflection">Evening reflection time</label>
+        <input id="setReflection" class="pix-input" type="time" />
+      </div>
+      <div class="form-row">
+        <label for="setLonely">Lonely after (minutes)</label>
+        <input id="setLonely" class="pix-input" type="number" min="1" />
+      </div>
+      <div class="form-row">
+        <label for="setGrumpy">Grumpy after (minutes)</label>
+        <input id="setGrumpy" class="pix-input" type="number" min="1" />
+      </div>
+      <div class="form-row">
+        <label for="setTyping">Typing heat max (keys/sec)</label>
+        <input id="setTyping" class="pix-input" type="number" min="1" max="30" step="0.5" />
+      </div>
+      <div class="form-row">
+        <label for="setAutostart">Start at login</label>
+        <input id="setAutostart" type="checkbox" />
+      </div>
+      <div class="form-sep">Reactions</div>
+      <div class="form-row">
+        <label for="setScroll">Scroll reaction</label>
+        <input id="setScroll" type="checkbox" />
+      </div>
+      <div class="form-row">
+        <label for="setIdleStretch">Idle stretch</label>
+        <input id="setIdleStretch" type="checkbox" />
+      </div>
+      <div class="form-row">
+        <label for="setSaveJump">Save jump</label>
+        <input id="setSaveJump" type="checkbox" />
+      </div>
+      <div class="form-row">
+        <label for="setWakeStretch">Wake-up stretch</label>
+        <input id="setWakeStretch" type="checkbox" />
+      </div>
+      <div class="form-sep">Notes</div>
+      <div class="form-row">
+        <span id="notesDir" class="hint"></span>
+        <button id="openNotesBtn" class="pix-btn nav-btn">Open</button>
+      </div>
+      <div class="panel-footer">
+        <span id="settingsMsg" class="hint"></span>
+        <button id="settingsTestReminderBtn" class="pix-btn" style="background: #888; width: 100%; margin-bottom: 8px;">Test Reminder</button>
+        <button id="settingsSaveBtn" class="pix-btn">Save</button>
       </div>
     </div>
   </div>
   <div id="toast"></div>
   <div id="cat-stage">
-    <div id="cat-elastic"><div id="cat-bounce"></div></div>
+    <div id="cat-elastic">
+      <div id="cat-bounce"></div>
+    </div>
   </div>
   <script src="../../dist/renderer/physics.js"></script>
   <script src="../../dist/renderer/renderer.js"></script>
 </body>
+
 </html>
