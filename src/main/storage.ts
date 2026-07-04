@@ -38,6 +38,10 @@ export class Storage {
     fs.mkdirSync(this.dir, { recursive: true });
   }
 
+  getDir(): string {
+    return this.dir;
+  }
+
   private jsonPath(key: string): string {
     return path.join(this.dir, `${key}.json`);
   }
@@ -55,8 +59,7 @@ export class Storage {
     }
   }
 
-  getToday(): DayLog {
-    const key = dateKey();
+  private readDay(key: string): DayLog {
     const file = this.jsonPath(key);
     if (!fs.existsSync(file)) return { date: key, entries: [] };
     try {
@@ -68,6 +71,27 @@ export class Storage {
     }
     this.quarantine(file);
     return { date: key, entries: [] };
+  }
+
+  getToday(): DayLog {
+    return this.readDay(dateKey());
+  }
+
+  getDay(date: string): DayLog {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { date: dateKey(), entries: [] };
+    return this.readDay(date);
+  }
+
+  listDates(): string[] {
+    try {
+      return fs
+        .readdirSync(this.dir)
+        .filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f))
+        .map((f) => f.slice(0, 10))
+        .sort();
+    } catch {
+      return [];
+    }
   }
 
   addEntry(text: string, type: 'note' | 'reflection'): DayLog {
