@@ -42,13 +42,3 @@ coverage/
 .idea/
 .vscode/
 .claude/
-.agents/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Temp Files
-tmp/
-temp/
