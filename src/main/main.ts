@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, powerMonitor, Tray, Menu, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, powerMonitor, Tray, Menu, nativeImage, shell, clipboard } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { loadConfig, saveConfig, sanitizeConfig, mergeConfig, Config } from './config';
@@ -165,7 +165,7 @@ function appMenuTemplate(): Electron.MenuItemConstructorOptions[] {
 }
 
 function createTray(): void {
-  const iconPath = path.join(__dirname, '..', '..', 'assets', 'cat', 'assets', 'catjang-logo.png');
+  const iconPath = path.join(__dirname, '..', '..', 'assets', 'icons', 'logo.png');
   let icon = nativeImage.createFromPath(iconPath);
   if (!icon.isEmpty()) icon = icon.resize({ width: 18, height: 18 });
   tray = new Tray(icon);
@@ -297,6 +297,16 @@ ipcMain.on('read-asset', (e, name: unknown) => {
   }
 });
 
+ipcMain.on('read-preset', (e, name: unknown) => {
+  try {
+    if (typeof name !== 'string' || !/^[a-z-]+\.png$/.test(name)) throw new Error('invalid preset');
+    const buf = fs.readFileSync(path.join(ASSET_DIR, 'presets', name));
+    e.returnValue = `data:image/png;base64,${buf.toString('base64')}`;
+  } catch {
+    e.returnValue = '';
+  }
+});
+
 ipcMain.handle('save-entry', (_e, payload: unknown) => {
   const p = payload as { text?: unknown; type?: unknown } | null;
   const text = p && typeof p.text === 'string' ? p.text.trim().slice(0, MAX_ENTRY_LENGTH) : '';
@@ -339,6 +349,11 @@ ipcMain.handle('get-overhang', () => {
 });
 
 ipcMain.on('ensure-on-screen', () => clampToScreen());
+
+ipcMain.on('copy-text', (_e, text: unknown) => {
+  if (typeof text !== 'string') return;
+  clipboard.writeText(text.slice(0, MAX_ENTRY_LENGTH));
+});
 
 ipcMain.on('show-context-menu', (e) => {
   const sender = BrowserWindow.fromWebContents(e.sender);

@@ -9,7 +9,10 @@ export interface Config {
   autoStartAtLogin: boolean;
   typing: { maxKeysPerSecond: number };
   reactions: { scroll: boolean; idleStretch: boolean; saveJump: boolean; wakeStretch: boolean };
+  theme: string;
 }
+
+const THEME_IDS = ['black', 'white', 'orange', 'siamese', 'calico', 'mackerel'];
 
 const DEFAULTS: Config = {
   reminders: ['11:30', '14:30', '16:00', '17:00'],
@@ -18,6 +21,7 @@ const DEFAULTS: Config = {
   autoStartAtLogin: true,
   typing: { maxKeysPerSecond: 5 },
   reactions: { scroll: true, idleStretch: true, saveJump: true, wakeStretch: true },
+  theme: 'black',
 };
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -65,6 +69,9 @@ export function sanitizeConfig(raw: unknown): Partial<Config> {
     if (Number.isFinite(rate) && rate >= 1 && rate <= 30) {
       out.typing = { maxKeysPerSecond: rate };
     }
+  }
+  if (typeof src.theme === 'string' && THEME_IDS.includes(src.theme)) {
+    out.theme = src.theme;
   }
   if (src.reactions && typeof src.reactions === 'object') {
     const r = src.reactions as Record<string, unknown>;

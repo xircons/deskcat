@@ -5,10 +5,36 @@ interface AppConfig {
   autoStartAtLogin: boolean;
   typing: { maxKeysPerSecond: number };
   reactions: { scroll: boolean; idleStretch: boolean; saveJump: boolean; wakeStretch: boolean };
+  theme: string;
 }
+
+interface CatTheme {
+  calm: [number, number, number];
+  eye: string;
+  outline: string;
+}
+
+const THEMES: Record<string, CatTheme> = {
+  black: { calm: [26, 26, 26], eye: '#0a0a0a', outline: '#ffffff' },
+  white: { calm: [242, 242, 242], eye: '#2a2a2a', outline: '#1a1a1a' },
+  orange: { calm: [214, 126, 50], eye: '#1a1a1a', outline: '#ffffff' },
+  siamese: { calm: [223, 213, 197], eye: '#3a2f28', outline: '#6b5b4a' },
+  calico: { calm: [238, 230, 218], eye: '#3a2f28', outline: '#8a7a68' },
+  mackerel: { calm: [122, 98, 71], eye: '#1a1a1a', outline: '#ffffff' },
+};
+
+const THEME_ORDER: Array<{ id: string; label: string; img: string }> = [
+  { id: 'black', label: 'Black', img: 'black.png' },
+  { id: 'white', label: 'White', img: 'white.png' },
+  { id: 'orange', label: 'Orange', img: 'orange.png' },
+  { id: 'siamese', label: 'Siamese', img: 'siamese.png' },
+  { id: 'calico', label: 'Calico', img: 'calico.png' },
+  { id: 'mackerel', label: 'Tabby', img: 'mackerel.png' },
+];
 
 interface PetApi {
   readAsset(name: string): string;
+  readPreset(name: string): string;
   onCursor(cb: (p: { x: number; y: number }) => void): void;
   onTypingRate(cb: (rate: number) => void): void;
   onScrollRate(cb: (rate: number) => void): void;
@@ -17,6 +43,7 @@ interface PetApi {
   onReminder(cb: (info: { reflection: boolean }) => void): void;
   saveEntry(text: string, type: 'note' | 'reflection'): Promise<void>;
   getToday(): Promise<{ date: string; entries: { time: string; text: string; type: string }[] }>;
+  copyText(text: string): void;
   moveWindow(dx: number, dy: number): void;
   ensureOnScreen(): void;
   hideCat(): void;
@@ -87,22 +114,32 @@ function showPose(name: PoseName): void {
   currentPose = name;
 }
 
-(function addBrows() {
-  const eyes = poseEls.idle.querySelector('[id$="-eyes-js"]');
-  if (!eyes || !eyes.parentNode) return;
+function addBrowsTo(
+  poseEl: HTMLElement,
+  positions: Array<[number, number]>,
+  y: number,
+  height: number
+): void {
+  const svg = poseEl.querySelector('svg');
+  if (!svg) return;
+  const anchor = poseEl.querySelector('[id$="-eyes-js"]')?.parentNode || svg;
   const NS = 'http://www.w3.org/2000/svg';
-  for (const [x, deg] of [[6.5, 14], [15.5, -14]] as Array<[number, number]>) {
+  for (const [x, deg] of positions) {
     const r = document.createElementNS(NS, 'rect');
     r.setAttribute('class', 'brow');
     r.setAttribute('x', String(x));
-    r.setAttribute('y', '9.4');
+    r.setAttribute('y', String(y));
     r.setAttribute('width', '6');
-    r.setAttribute('height', '1.6');
+    r.setAttribute('height', String(height));
     r.setAttribute('fill', 'var(--cat-color)');
-    r.setAttribute('transform', `rotate(${deg} ${x + 3} 10.2)`);
-    eyes.parentNode.appendChild(r);
+    r.setAttribute('transform', `rotate(${deg} ${x + 3} ${y + height / 2})`);
+    anchor.appendChild(r);
   }
-})();
+}
+
+addBrowsTo(poseEls.idle, [[6.5, 16], [15.5, -16]], 9, 4.5);
+addBrowsTo(poseEls.pl, [[10.5, 16], [19.5, -16]], 11.5, 5);
+addBrowsTo(poseEls.pr, [[10.5, 16], [19.5, -16]], 11.5, 5);
 
 const pupilEls = {} as Record<PoseName, SVGElement[]>;
 for (const name of Object.keys(poseEls) as PoseName[]) {
@@ -125,16 +162,27 @@ let cursor = { x: 170, y: -200 };
 function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
 function heat(): number { return Math.min(typingRate / MAX_RATE, 1); }
 
+let themeCalm: [number, number, number] = [26, 26, 26];
+
 function bodyColor(): string {
   const t = heat();
-  const calm = [26, 26, 26];
-  const mid = [74, 32, 28];
   const hot = [217, 79, 61];
+  const mid = themeCalm.map((v, i) => (v + hot[i]) / 2);
   const c =
     t < 0.5
-      ? calm.map((v, i) => lerp(v, mid[i], t / 0.5))
+      ? themeCalm.map((v, i) => lerp(v, mid[i], t / 0.5))
       : mid.map((v, i) => lerp(v, hot[i], (t - 0.5) / 0.5));
   return `rgb(${c.map(Math.round).join(',')})`;
+}
+
+let savedTheme = 'black';
+
+function applyTheme(id: string): void {
+  const theme = THEMES[id] || THEMES.black;
+  themeCalm = theme.calm;
+  document.documentElement.style.setProperty('--eye-color', theme.eye);
+  document.documentElement.style.setProperty('--cat-outline', theme.outline);
+  lastBodyColor = '';
 }
 
 const HEAD_ANCHOR_SHIFT_Y = 235.5;
@@ -379,6 +427,10 @@ function updatePupils(faceX: number, faceY: number): void {
   let px = (dx / mag) * 1.0;
   let py = (dy / mag) * 1.0;
   if (mood === 'lonely') { px = 0; py = 1; }
+  if (mood === 'grumpy' || reminderAngry) {
+    px *= 0.4;
+    py = 1;
+  }
   const t = `translate(${px.toFixed(2)}px, ${py.toFixed(2)}px)`;
   for (const el of pupilEls[currentPose]) {
     el.style.transform = t;
@@ -507,9 +559,12 @@ function purr(ms: number): void {
   setTimeout(() => document.documentElement.classList.remove('purring'), ms);
 }
 
+let reminderAngry = false;
+
 function applyMood(): void {
-  stage.classList.toggle('lonely', mood === 'lonely');
-  stage.classList.toggle('grumpy', mood === 'grumpy');
+  const grumpy = mood === 'grumpy' || reminderAngry;
+  stage.classList.toggle('lonely', mood === 'lonely' && !reminderAngry);
+  stage.classList.toggle('grumpy', grumpy);
 }
 
 const DRAG_START_THRESHOLD_PX = 4;
@@ -651,6 +706,9 @@ function positionPanel(panel: HTMLElement): void {
 function hideAllPanels(): void {
   for (const p of allPanels) p.classList.remove('visible');
   noteInput.value = '';
+  reminderAngry = false;
+  applyMood();
+  applyTheme(savedTheme);
   syncInteractive();
 }
 
@@ -663,32 +721,31 @@ function openPanel(panel: HTMLElement): void {
   positionPanel(panel);
 }
 
+function buildReflectionTemplate(todayNotes: string[]): string {
+  const lines: string[] = ['Daily Reflection', '', '1. สิ่งที่ทำวันนี้'];
+  if (todayNotes.length) {
+    for (const n of todayNotes) lines.push(`- ${n}`);
+  } else {
+    lines.push('- ');
+  }
+  lines.push('', '2. ความคืบหน้าเทียบกับเป้าหมาย', '- ', '', '3. ปัญหา / อุปสรรค', '- ');
+  return lines.join('\n');
+}
+
 function showPopup(mode: 'note' | 'reflection' | 'reminder-note', time?: string): void {
   popupMode = mode;
   openPanel(popup);
+  popup.classList.toggle('reminder', mode === 'reminder-note' || mode === 'reflection');
+  popup.classList.toggle('reflection', mode === 'reflection');
+  reminderAngry = mode === 'reminder-note' || mode === 'reflection';
+  applyMood();
   if (mode === 'reflection') {
-    popupTitle.textContent = "Today's recap — how was your day?";
-    noteInput.placeholder = 'Write your evening reflection…';
-    entriesDiv.classList.add('visible');
-    entriesDiv.textContent = 'Loading…';
+    popupTitle.textContent = 'Daily Reflection';
+    entriesDiv.classList.remove('visible');
+    noteInput.value = buildReflectionTemplate([]);
     api.getToday().then((log) => {
-      entriesDiv.innerHTML = '';
       const notes = log.entries.filter((e) => e.type === 'note');
-      if (!notes.length) {
-        entriesDiv.textContent = 'No notes logged today.';
-        return;
-      }
-      for (const e of notes) {
-        const d = new Date(e.time);
-        const row = document.createElement('div');
-        row.className = 'entry';
-        const t = document.createElement('span');
-        t.className = 't';
-        t.textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        row.appendChild(t);
-        row.appendChild(document.createTextNode(e.text));
-        entriesDiv.appendChild(row);
-      }
+      noteInput.value = buildReflectionTemplate(notes.map((e) => e.text));
     });
   } else {
     popupTitle.textContent = mode === 'reminder-note' ? 'REMINDER NOTE!' : 'QUICK NOTE';
@@ -704,7 +761,11 @@ function showPopup(mode: 'note' | 'reflection' | 'reminder-note', time?: string)
 
 function hidePopup(): void {
   popup.classList.remove('visible');
+  popup.classList.remove('reminder');
+  popup.classList.remove('reflection');
   noteInput.value = '';
+  reminderAngry = false;
+  applyMood();
 }
 
 function togglePopup(): void {
@@ -822,9 +883,54 @@ const setScroll = document.getElementById('setScroll') as HTMLInputElement;
 const setIdleStretch = document.getElementById('setIdleStretch') as HTMLInputElement;
 const setSaveJump = document.getElementById('setSaveJump') as HTMLInputElement;
 const setWakeStretch = document.getElementById('setWakeStretch') as HTMLInputElement;
+const themeGrid = document.getElementById('themeGrid')!;
 const notesDirEl = document.getElementById('notesDir')!;
 const settingsMsg = document.getElementById('settingsMsg')!;
+
+let selectedTheme = 'black';
+const themeSwatches = new Map<string, HTMLButtonElement>();
+
+function markSelectedTheme(id: string): void {
+  for (const [tid, el] of themeSwatches) el.classList.toggle('selected', tid === id);
+}
+
+function pickTheme(id: string): void {
+  selectedTheme = id;
+  markSelectedTheme(id);
+  applyTheme(id);
+}
+
+for (const { id, label, img } of THEME_ORDER) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'theme-swatch';
+  const src = api.readPreset(img);
+  const imgTag = src
+    ? `<img src="${src}" alt="${label}" draggable="false" />`
+    : `<span class="theme-fallback" style="background:rgb(${THEMES[id].calm.join(',')})"></span>`;
+  btn.innerHTML = `${imgTag}<span class="theme-name">${label}</span>`;
+  btn.addEventListener('click', () => pickTheme(id));
+  themeGrid.appendChild(btn);
+  themeSwatches.set(id, btn);
+}
+
 const settingsSaveBtn = document.getElementById('settingsSaveBtn')!;
+
+const settingsTabBtns = Array.from(
+  settingsPanel.querySelectorAll<HTMLButtonElement>('.tab-btn')
+);
+const settingsTabPages = Array.from(
+  settingsPanel.querySelectorAll<HTMLElement>('.tab-page')
+);
+
+function selectSettingsTab(tab: string): void {
+  for (const b of settingsTabBtns) b.classList.toggle('active', b.dataset.tab === tab);
+  for (const p of settingsTabPages) p.classList.toggle('visible', p.dataset.page === tab);
+}
+
+for (const btn of settingsTabBtns) {
+  btn.addEventListener('click', () => selectSettingsTab(btn.dataset.tab || 'general'));
+}
 
 document.getElementById('openNotesBtn')!.addEventListener('click', () => api.openNotesFolder());
 
@@ -839,10 +945,13 @@ function fillSettings(cfg: AppConfig): void {
   setIdleStretch.checked = cfg.reactions.idleStretch;
   setSaveJump.checked = cfg.reactions.saveJump;
   setWakeStretch.checked = cfg.reactions.wakeStretch;
+  selectedTheme = cfg.theme || 'black';
+  markSelectedTheme(selectedTheme);
 }
 
 function showSettingsPanel(): void {
   openPanel(settingsPanel);
+  selectSettingsTab('general');
   settingsMsg.textContent = '';
   settingsMsg.className = 'hint';
   api.getConfig().then(fillSettings);
@@ -898,6 +1007,7 @@ settingsSaveBtn.addEventListener('click', () => {
         saveJump: setSaveJump.checked,
         wakeStretch: setWakeStretch.checked,
       },
+      theme: selectedTheme,
     })
     .then((cfg) => {
       fillSettings(cfg);
@@ -932,6 +1042,26 @@ function save(): void {
 }
 
 saveBtn.addEventListener('click', save);
+const skipBtn = document.getElementById('skipBtn');
+if (skipBtn) {
+  skipBtn.addEventListener('click', () => {
+    hideAllPanels();
+    purr(1200);
+  });
+}
+const copyBtn = document.getElementById('copyBtn');
+if (copyBtn) {
+  copyBtn.addEventListener('click', () => {
+    const text = noteInput.value;
+    if (!text.trim()) return;
+    api.copyText(text);
+    const original = copyBtn.textContent;
+    copyBtn.textContent = 'Copied!';
+    setTimeout(() => {
+      copyBtn.textContent = original || 'Copy';
+    }, 1500);
+  });
+}
 for (const btn of document.querySelectorAll('.panel-close')) {
   btn.addEventListener('click', hideAllPanels);
 }
@@ -966,6 +1096,10 @@ api.onConfig((cfg) => {
     MAX_RATE = cfg.typing.maxKeysPerSecond;
   }
   if (cfg.reactions) reactions = { ...reactions, ...cfg.reactions };
+  if (typeof cfg.theme === 'string') {
+    savedTheme = cfg.theme;
+    applyTheme(cfg.theme);
+  }
 });
 api.onOpenPanel((panel) => {
   if (panel === 'note') showPopup('note');

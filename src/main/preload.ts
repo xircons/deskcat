@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('petApi', {
   readAsset: (name: string): string => ipcRenderer.sendSync('read-asset', name),
+  readPreset: (name: string): string => ipcRenderer.sendSync('read-preset', name),
   onCursor: (cb: (p: { x: number; y: number }) => void) =>
     ipcRenderer.on('cursor', (_e, p) => cb(p)),
   onTypingRate: (cb: (rate: number) => void) =>
@@ -16,6 +17,7 @@ contextBridge.exposeInMainWorld('petApi', {
   saveEntry: (text: string, type: 'note' | 'reflection') =>
     ipcRenderer.invoke('save-entry', { text, type }),
   getToday: () => ipcRenderer.invoke('get-today'),
+  copyText: (text: string) => ipcRenderer.send('copy-text', text),
   moveWindow: (dx: number, dy: number) => ipcRenderer.send('move-window', { dx, dy }),
   ensureOnScreen: () => ipcRenderer.send('ensure-on-screen'),
   hideCat: () => ipcRenderer.send('hide-cat'),
