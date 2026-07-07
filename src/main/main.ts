@@ -165,7 +165,7 @@ function appMenuTemplate(): Electron.MenuItemConstructorOptions[] {
 }
 
 function createTray(): void {
-  const iconPath = path.join(__dirname, '..', '..', 'assets', 'icons', 'logo.png');
+  const iconPath = path.join(app.getAppPath(), 'assets', 'icons', 'logo.png');
   let icon = nativeImage.createFromPath(iconPath);
   if (!icon.isEmpty()) icon = icon.resize({ width: 18, height: 18 });
   tray = new Tray(icon);
@@ -286,7 +286,7 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-const ASSET_DIR = path.join(__dirname, '..', '..', 'assets', 'cat');
+const ASSET_DIR = path.join(app.getAppPath(), 'assets', 'cat');
 
 ipcMain.on('read-asset', (e, name: unknown) => {
   try {
