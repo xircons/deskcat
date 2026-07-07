@@ -5,10 +5,93 @@ interface AppConfig {
   autoStartAtLogin: boolean;
   typing: { maxKeysPerSecond: number };
   reactions: { scroll: boolean; idleStretch: boolean; saveJump: boolean; wakeStretch: boolean };
+  pattern: string;
+}
+
+interface Spot { x: number; y: number; color: string }
+interface PatternData {
+  baseColor: string;
+  eyeColor: string;
+  eyeBgColor: string;
+  oddEye: boolean;
+  eyeColorLeft: string;
+  eyeColorRight: string;
+  head: Spot[];
+  body: Spot[];
+  tail: Spot[];
+  earL: Spot[];
+  earR: Spot[];
+  legFl: Spot[];
+  legFr: Spot[];
+  legRl: Spot[];
+  legRr: Spot[];
+}
+
+const PATTERN_ORDER: Array<{ id: string; label: string; img: string }> = [
+  { id: 'black', label: 'Black', img: 'black.png' },
+  { id: 'white', label: 'Grey', img: 'white.png' },
+  { id: 'orange', label: 'Orange', img: 'orange.png' },
+  { id: 'siamese', label: 'Siamese', img: 'siamese.png' },
+  { id: 'calico', label: 'Calico', img: 'calico.png' },
+  { id: 'mackerel', label: 'Tabby', img: 'mackerel.png' },
+];
+
+const PATTERNS: Record<string, PatternData> = {};
+for (const { id } of PATTERN_ORDER) {
+  try {
+    const raw = (window as unknown as { petApi: { readPattern(i: string): string } }).petApi.readPattern(id);
+    if (raw) PATTERNS[id] = JSON.parse(raw) as PatternData;
+  } catch {
+    void 0;
+  }
+}
+
+const PART_SUFFIX: Record<
+  keyof Pick<PatternData, 'head' | 'body' | 'tail' | 'earL' | 'earR' | 'legFl' | 'legFr' | 'legRl' | 'legRr'>,
+  string
+> = {
+  head: '-head',
+  body: '-body',
+  tail: '-tail',
+  earL: '-ear-left',
+  earR: '-ear-right',
+  legFl: '-leg-fl',
+  legFr: '-leg-fr',
+  legRl: '-leg-rl',
+  legRr: '-leg-rr',
+};
+
+type CellMap = Record<string, { origin: [number, number]; cells: Record<string, [number, number][]> }>;
+const CELLMAP: CellMap = (() => {
+  try {
+    const raw = (window as unknown as { petApi: { readCellMap(): string } }).petApi.readCellMap();
+    return raw ? (JSON.parse(raw) as CellMap) : {};
+  } catch {
+    return {};
+  }
+})();
+
+const POSE_SVG_NAME: Partial<Record<string, string>> = {
+  pl: 'press-left',
+  pr: 'press-right',
+  jstart: 'jump-start',
+  jing: 'jump-ing',
+  scroll: 'scroll-unroll',
+  spd: 'stretch-pose-default',
+};
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
 interface PetApi {
   readAsset(name: string): string;
+  readPreset(name: string): string;
+  readPattern(id: string): string;
+  readCellMap(): string;
   onCursor(cb: (p: { x: number; y: number }) => void): void;
   onTypingRate(cb: (rate: number) => void): void;
   onScrollRate(cb: (rate: number) => void): void;
@@ -17,7 +100,11 @@ interface PetApi {
   onReminder(cb: (info: { reflection: boolean }) => void): void;
   saveEntry(text: string, type: 'note' | 'reflection'): Promise<void>;
   getToday(): Promise<{ date: string; entries: { time: string; text: string; type: string }[] }>;
+  copyText(text: string): void;
   moveWindow(dx: number, dy: number): void;
+  setPosition(x: number, y: number): void;
+  getPosition(): Promise<[number, number]>;
+  getDisplayBounds(): Promise<{ x: number; y: number; width: number; height: number }>;
   ensureOnScreen(): void;
   hideCat(): void;
   petCat(): void;
@@ -87,23 +174,6 @@ function showPose(name: PoseName): void {
   currentPose = name;
 }
 
-(function addBrows() {
-  const eyes = poseEls.idle.querySelector('[id$="-eyes-js"]');
-  if (!eyes || !eyes.parentNode) return;
-  const NS = 'http://www.w3.org/2000/svg';
-  for (const [x, deg] of [[6.5, 14], [15.5, -14]] as Array<[number, number]>) {
-    const r = document.createElementNS(NS, 'rect');
-    r.setAttribute('class', 'brow');
-    r.setAttribute('x', String(x));
-    r.setAttribute('y', '9.4');
-    r.setAttribute('width', '6');
-    r.setAttribute('height', '1.6');
-    r.setAttribute('fill', 'var(--cat-color)');
-    r.setAttribute('transform', `rotate(${deg} ${x + 3} 10.2)`);
-    eyes.parentNode.appendChild(r);
-  }
-})();
-
 const pupilEls = {} as Record<PoseName, SVGElement[]>;
 for (const name of Object.keys(poseEls) as PoseName[]) {
   pupilEls[name] = Array.from(
@@ -125,16 +195,172 @@ let cursor = { x: 170, y: -200 };
 function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
 function heat(): number { return Math.min(typingRate / MAX_RATE, 1); }
 
+let themeCalm: [number, number, number] = [26, 26, 26];
+
 function bodyColor(): string {
-  const t = heat();
-  const calm = [26, 26, 26];
-  const mid = [74, 32, 28];
-  const hot = [217, 79, 61];
+  const lum = (0.299 * themeCalm[0] + 0.587 * themeCalm[1] + 0.114 * themeCalm[2]) / 255;
+  const scale = 1 - Math.min(1, Math.max(0, (lum - 0.35) / 0.6)) * 0.72;
+  const t = heat() * scale;
+  const hot = [255, 140, 0];
+  const mid = themeCalm.map((v, i) => (v + hot[i]) / 2);
   const c =
     t < 0.5
-      ? calm.map((v, i) => lerp(v, mid[i], t / 0.5))
+      ? themeCalm.map((v, i) => lerp(v, mid[i], t / 0.5))
       : mid.map((v, i) => lerp(v, hot[i], (t - 0.5) / 0.5));
   return `rgb(${c.map(Math.round).join(',')})`;
+}
+
+let savedTheme = 'black';
+
+const PATTERN_POSES: PoseName[] = ['idle', 'pl', 'pr', 'drag', 'jstart', 'jing', 'scroll', 'spd'];
+
+function getOrCreateRect(slot: SVGGElement, index: number, NS: string): SVGRectElement {
+  if (index < slot.children.length) {
+    const r = slot.children[index] as SVGRectElement;
+    r.style.display = 'block';
+    return r;
+  }
+  const r = document.createElementNS(NS, 'rect') as SVGRectElement;
+  slot.appendChild(r);
+  return r;
+}
+
+function hideUnusedRects(slot: SVGGElement, startIndex: number): void {
+  for (let i = startIndex; i < slot.children.length; i++) {
+    (slot.children[i] as SVGRectElement).style.display = 'none';
+  }
+}
+
+function paintPartSpots(
+  poseEl: HTMLElement,
+  poseName: PoseName,
+  part: keyof typeof PART_SUFFIX,
+  spots: Spot[]
+): void {
+  if (poseName === 'drag' && part === 'body' && typeof chain !== 'undefined' && chain) {
+    const { wrappers, lerpData } = chain;
+    const wrapperIndices = new Array(wrappers.length).fill(0);
+    const NS = 'http://www.w3.org/2000/svg';
+    for (const s of spots) {
+      const idx = Math.max(0, Math.min(PHYS.N_SEG - 1, Math.floor(s.y)));
+      const wrapper = wrappers[idx];
+      const slot = wrapper.querySelector('.patches') as SVGGElement;
+      const ld = lerpData.find(d => d.rect.parentNode === wrapper);
+      if (!slot || !ld) continue;
+      
+      const cw = ld.startW / 22;
+      const ch = ld.startH; 
+      const ox = ld.startX;
+      const oy = ld.startYLocal;
+      
+      const r = getOrCreateRect(slot, wrapperIndices[idx]++, NS);
+      r.setAttribute('x', String(ox + s.x * cw));
+      r.setAttribute('y', String(oy)); 
+      r.setAttribute('width', String(cw));
+      r.setAttribute('height', String(ch));
+      r.setAttribute('fill', s.color);
+    }
+    for (let i = 0; i < wrappers.length; i++) {
+      const slot = wrappers[i].querySelector('.patches') as SVGGElement;
+      if (slot) hideUnusedRects(slot, wrapperIndices[i]);
+    }
+    return;
+  }
+
+  const els = poseEl.querySelectorAll<SVGGElement>(`[id$="${PART_SUFFIX[part]}"]`);
+  for (const el of Array.from(els)) {
+    let slot = el.querySelector<SVGGElement>('.patches');
+    if (!slot) {
+      const NS = 'http://www.w3.org/2000/svg';
+      slot = document.createElementNS(NS, 'g');
+      slot.setAttribute('class', 'patches');
+      el.appendChild(slot);
+      const pathNode = el.querySelector('path');
+      if (pathNode) {
+        let defs = poseEl.querySelector('defs');
+        const svg = poseEl.querySelector('svg');
+        if (!defs && svg) {
+          defs = document.createElementNS(NS, 'defs');
+          svg.insertBefore(defs, svg.firstChild);
+        }
+        if (defs) {
+          const clipId = `${el.id}-auto-clip`;
+          if (!defs.querySelector(`#${clipId}`)) {
+            const cp = document.createElementNS(NS, 'clipPath');
+            cp.setAttribute('id', clipId);
+            cp.appendChild(pathNode.cloneNode(true));
+            defs.appendChild(cp);
+          }
+          slot.setAttribute('clip-path', `url(#${clipId})`);
+        }
+      }
+    }
+    
+    const NS = 'http://www.w3.org/2000/svg';
+    const svgName = POSE_SVG_NAME[poseName];
+    const map = svgName && (part === 'head' || part === 'body') ? CELLMAP[`${svgName}:${part}`] : undefined;
+    const frame = el.getAttribute('data-patch-frame');
+    let rectIndex = 0;
+    
+    if (map) {
+      const [ox, oy] = map.origin;
+      for (const s of spots) {
+        const cell = map.cells[`${s.x},${s.y}`];
+        if (!cell) continue;
+        for (const [dx, dy] of cell) {
+          const r = getOrCreateRect(slot, rectIndex++, NS);
+          r.setAttribute('x', String(ox + dx));
+          r.setAttribute('y', String(oy + dy));
+          r.setAttribute('width', '1');
+          r.setAttribute('height', '1');
+          r.setAttribute('fill', s.color);
+        }
+      }
+    } else if (frame) {
+      const f = frame.split(/\s+/).map(Number);
+      if (f.length >= 4) {
+        const [ox, oy, cw, ch] = f;
+        for (const s of spots) {
+          const r = getOrCreateRect(slot, rectIndex++, NS);
+          r.setAttribute('x', String(ox + s.x * cw));
+          r.setAttribute('y', String(oy + s.y * ch));
+          r.setAttribute('width', String(cw));
+          r.setAttribute('height', String(ch));
+          r.setAttribute('fill', s.color);
+        }
+      }
+    }
+    hideUnusedRects(slot, rectIndex);
+  }
+}
+
+function paintPattern(p: PatternData): void {
+  for (const name of PATTERN_POSES) {
+    const el = poseEls[name];
+    for (const key of Object.keys(PART_SUFFIX) as Array<keyof typeof PART_SUFFIX>) {
+      paintPartSpots(el, name, key, p[key]);
+    }
+  }
+}
+
+function applyTheme(id: string): void {
+  const p = PATTERNS[id] || PATTERNS.black;
+  if (!p) return;
+  const base = hexToRgb(p.baseColor) || [26, 26, 26];
+  themeCalm = base;
+  const lum = (0.299 * base[0] + 0.587 * base[1] + 0.114 * base[2]) / 255;
+  document.documentElement.style.setProperty('--eye-bg-color', p.eyeBgColor);
+  document.documentElement.style.setProperty('--cat-outline', lum > 0.5 ? '#1a1a1a' : '#ffffff');
+  if (p.oddEye) {
+    document.documentElement.style.setProperty('--eye-color-left', p.eyeColorLeft);
+    document.documentElement.style.setProperty('--eye-color-right', p.eyeColorRight);
+  } else {
+    document.documentElement.style.removeProperty('--eye-color-left');
+    document.documentElement.style.removeProperty('--eye-color-right');
+    document.documentElement.style.setProperty('--eye-color', p.eyeColor);
+  }
+  paintPattern(p);
+  lastBodyColor = '';
 }
 
 const HEAD_ANCHOR_SHIFT_Y = 235.5;
@@ -198,13 +424,7 @@ function rectGeom(r: SVGRectElement): { x: number; y: number; useTransform: bool
     useTransform: !!m,
   };
 }
-function setRectXY(rect: SVGRectElement, x: number, y: number, useTransform: boolean): void {
-  if (useTransform) rect.setAttribute('transform', `translate(${x} ${y})`);
-  else {
-    rect.setAttribute('x', String(x));
-    rect.setAttribute('y', String(y));
-  }
-}
+// setRectXY removed, using inline styles for hardware acceleration
 
 function setupChain(): ChainData | null {
   const root = poseEls.drag.querySelector('svg');
@@ -269,7 +489,9 @@ function setupChain(): ChainData | null {
         startH: startHs[rd.origIdx] !== undefined ? startHs[rd.origIdx] : rd.h,
         endH: rd.h,
       });
-      rd.rect.remove();
+      rd.rect.removeAttribute('x');
+      rd.rect.removeAttribute('y');
+      rd.rect.removeAttribute('transform');
     }
   }
 
@@ -279,7 +501,17 @@ function setupChain(): ChainData | null {
   const NS = 'http://www.w3.org/2000/svg';
   for (let i = 0; i < PHYS.N_SEG; i++) {
     const wrap = document.createElementNS(NS, 'g') as SVGGElement;
-    for (const rd of segments[i].rects) wrap.appendChild(rd.rect);
+    for (const rd of segments[i].rects) {
+      const ld = lerpData.find((d) => d.rect === rd.rect);
+      if (ld) {
+        rd.rect.setAttribute('width', String(ld.startW));
+        rd.rect.setAttribute('height', String(ld.startH));
+      }
+      wrap.appendChild(rd.rect);
+    }
+    const patches = document.createElementNS(NS, 'g');
+    patches.setAttribute('class', 'patches');
+    wrap.appendChild(patches);
     parent.appendChild(wrap);
     parent = wrap;
     wrappers.push(wrap);
@@ -318,29 +550,39 @@ function applyChain(): void {
 
   for (let i = 0; i < wrappers.length; i++) {
     const ty = i === 0 ? bodyYmin : segHeight;
-    wrappers[i].setAttribute('transform', `translate(${phys.dxState[i].toFixed(3)} ${ty.toFixed(3)})`);
+    wrappers[i].style.transform = `translate3d(${phys.dxState[i].toFixed(3)}px, ${ty.toFixed(3)}px, 0)`;
   }
 
   for (const ld of lerpData) {
     const x = ld.startX + (ld.endX - ld.startX) * phys.stretchT;
     const y = ld.startYLocal + (ld.endYLocal - ld.startYLocal) * phys.stretchT;
-    setRectXY(ld.rect, x, y, ld.useTransform);
-    ld.rect.setAttribute('width', Math.max(0, ld.startW + (ld.endW - ld.startW) * phys.stretchT).toFixed(3));
-    ld.rect.setAttribute('height', Math.max(0, ld.startH + (ld.endH - ld.startH) * phys.stretchT).toFixed(3));
+    
+    const w = Math.max(0, ld.startW + (ld.endW - ld.startW) * phys.stretchT);
+    const h = Math.max(0, ld.startH + (ld.endH - ld.startH) * phys.stretchT);
+    const scaleX = ld.startW > 0 ? w / ld.startW : 1;
+    const scaleY = ld.startH > 0 ? h / ld.startH : 1;
+    
+    ld.rect.style.transform = `translate3d(${x.toFixed(3)}px, ${y.toFixed(3)}px, 0) scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, 1)`;
+
+    const parent = ld.rect.parentNode as SVGGElement;
+    const patches = parent?.querySelector('.patches') as SVGGElement;
+    if (patches && ld.startH > 0 && ld.startW > 0) {
+      patches.style.transform = `translate3d(${x.toFixed(3)}px, ${y.toFixed(3)}px, 0) scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, 1) translate3d(${-ld.startX}px, ${-ld.startYLocal}px, 0)`;
+    }
   }
 
   for (const lg of legGroups) {
     const ty = lg.delta * (1 - phys.stretchT);
     let dx = 0;
     for (let i = 0; i <= lg.segIdx; i++) dx += phys.dxState[i];
-    lg.el.setAttribute('transform', `translate(${dx.toFixed(3)} ${ty.toFixed(3)})`);
+    lg.el.style.transform = `translate3d(${dx.toFixed(3)}px, ${ty.toFixed(3)}px, 0)`;
   }
 
   if (tailGroup && tailEndY !== null && tailStartY !== null) {
     let tailDx = 0;
     for (let i = 0; i < phys.dxState.length; i++) tailDx += phys.dxState[i];
     const offsetY = (tailStartY - tailEndY) * (1 - phys.stretchT);
-    tailGroup.setAttribute('transform', `translate(${tailDx.toFixed(3)} ${offsetY.toFixed(2)})`);
+    tailGroup.style.transform = `translate3d(${tailDx.toFixed(3)}px, ${offsetY.toFixed(3)}px, 0)`;
   }
 }
 
@@ -365,7 +607,8 @@ function chainTick(): void {
     showPose('idle');
     api.moveWindow(0, -HEAD_ANCHOR_SHIFT_Y);
     api.ensureOnScreen();
-    syncInteractive();
+    if (interactiveTimeout) clearTimeout(interactiveTimeout);
+    interactiveTimeout = setTimeout(updateInteractive, 10);
     document.body.classList.remove('dragging');
     const openNow = allPanels.find((p) => p.classList.contains('visible'));
     if (openNow) positionPanel(openNow);
@@ -379,6 +622,10 @@ function updatePupils(faceX: number, faceY: number): void {
   let px = (dx / mag) * 1.0;
   let py = (dy / mag) * 1.0;
   if (mood === 'lonely') { px = 0; py = 1; }
+  if (mood === 'grumpy' || reminderAngry) {
+    px *= 0.4;
+    py = 1;
+  }
   const t = `translate(${px.toFixed(2)}px, ${py.toFixed(2)}px)`;
   for (const el of pupilEls[currentPose]) {
     el.style.transform = t;
@@ -429,6 +676,53 @@ function triggerJump(): void {
   setTimeout(() => stage.classList.remove('jumping'), JUMP_TOTAL_MS);
 }
 
+let isChangingSkin = false;
+
+function triggerSkinChangeAnimation(newTheme: string) {
+  if (isChangingSkin) return;
+  isChangingSkin = true;
+  
+  Promise.all([api.getPosition(), api.getDisplayBounds()]).then(([[startX, startY], bounds]) => {
+    let currentX = startX;
+    const speed = 15;
+    
+    const distToLeft = startX - bounds.x;
+    const distToRight = (bounds.x + bounds.width) - startX;
+    const runToLeftEdge = distToLeft < distToRight;
+    
+    const targetEdgeX = runToLeftEdge ? bounds.x - 120 : bounds.x + bounds.width;
+    const distToEdge = Math.abs(targetEdgeX - startX);
+    const ticksToEdge = Math.max(30, Math.ceil(distToEdge / speed));
+    
+    const velToEdge = runToLeftEdge ? -speed : speed;
+    const velFromEdge = runToLeftEdge ? speed : -speed;
+    
+    let ticks = 0;
+    const runInterval = setInterval(() => {
+      ticks++;
+      
+      if (ticks <= ticksToEdge) {
+        currentX += velToEdge;
+        api.setPosition(currentX, startY);
+        showPose(ticks % 6 < 3 ? 'pl' : 'pr');
+      }
+      
+      if (ticks === ticksToEdge) {
+        applyTheme(newTheme);
+      } else if (ticks > ticksToEdge && ticks <= ticksToEdge * 2) {
+        currentX += velFromEdge;
+        api.setPosition(currentX, startY);
+        showPose(ticks % 6 < 3 ? 'pl' : 'pr');
+      } else if (ticks > ticksToEdge * 2) {
+        clearInterval(runInterval);
+        isChangingSkin = false;
+        showPose('idle');
+        api.setPosition(startX, startY);
+      }
+    }, 16);
+  });
+}
+
 function frame(): void {
   const now = performance.now();
 
@@ -437,6 +731,12 @@ function frame(): void {
   const faceY = rect.top + rect.height * 0.35;
 
   chainTick();
+
+  if (isChangingSkin) {
+    updatePupils(faceX, faceY);
+    requestAnimationFrame(frame);
+    return;
+  }
 
   if (phys.dragging || phys.releasing) {
     if (stretchMode) cancelStretch(now);
@@ -507,9 +807,12 @@ function purr(ms: number): void {
   setTimeout(() => document.documentElement.classList.remove('purring'), ms);
 }
 
+let reminderAngry = false;
+
 function applyMood(): void {
-  stage.classList.toggle('lonely', mood === 'lonely');
-  stage.classList.toggle('grumpy', mood === 'grumpy');
+  const grumpy = mood === 'grumpy' || reminderAngry;
+  stage.classList.toggle('lonely', mood === 'lonely' && !reminderAngry);
+  stage.classList.toggle('grumpy', grumpy);
 }
 
 const DRAG_START_THRESHOLD_PX = 4;
@@ -519,23 +822,14 @@ let lastX = 0, lastY = 0;
 let downX = 0, downY = 0;
 
 let interactive = false;
-function setInteractive(v: boolean): void {
-  if (v === interactive) return;
-  interactive = v;
-  api.setIgnoreMouseEvents(!v);
-}
+let hoverCount = 0;
+let interactiveTimeout: ReturnType<typeof setTimeout> | null = null;
 
-function overInteractive(x: number, y: number): boolean {
-  const el = document.elementFromPoint(x, y);
-  return !!el && (stage.contains(el) || allPanels.some((p) => p.contains(el)));
-}
-
-function syncInteractive(): void {
-  if (pointerDown) {
-    setInteractive(true);
-    return;
-  }
-  setInteractive(overInteractive(cursor.x, cursor.y));
+function updateInteractive(): void {
+  const shouldBeInteractive = pointerDown || hoverCount > 0;
+  if (shouldBeInteractive === interactive) return;
+  interactive = shouldBeInteractive;
+  api.setIgnoreMouseEvents(!interactive);
 }
 
 stage.addEventListener('pointerdown', (e) => {
@@ -578,7 +872,8 @@ function endPointer(wasCancelled: boolean): void {
   } else if (!wasCancelled && Date.now() - downAt < 350) {
     togglePopup();
   }
-  syncInteractive();
+  if (interactiveTimeout) clearTimeout(interactiveTimeout);
+  interactiveTimeout = setTimeout(updateInteractive, 10);
 }
 
 stage.addEventListener('pointerup', () => endPointer(false));
@@ -618,8 +913,16 @@ stage.addEventListener('contextmenu', (e: MouseEvent) => {
 });
 
 for (const el of [stage, ...allPanels]) {
-  el.addEventListener('mouseenter', () => setInteractive(true));
-  el.addEventListener('mouseleave', () => syncInteractive());
+  el.addEventListener('mouseenter', () => {
+    hoverCount++;
+    if (interactiveTimeout) clearTimeout(interactiveTimeout);
+    updateInteractive();
+  });
+  el.addEventListener('mouseleave', () => {
+    hoverCount = Math.max(0, hoverCount - 1);
+    if (interactiveTimeout) clearTimeout(interactiveTimeout);
+    interactiveTimeout = setTimeout(updateInteractive, 10);
+  });
 }
 
 let popupMode: 'note' | 'reflection' | 'reminder-note' = 'note';
@@ -651,7 +954,11 @@ function positionPanel(panel: HTMLElement): void {
 function hideAllPanels(): void {
   for (const p of allPanels) p.classList.remove('visible');
   noteInput.value = '';
-  syncInteractive();
+  reminderAngry = false;
+  applyMood();
+  applyTheme(savedTheme);
+  if (interactiveTimeout) clearTimeout(interactiveTimeout);
+  interactiveTimeout = setTimeout(updateInteractive, 10);
 }
 
 function openPanel(panel: HTMLElement): void {
@@ -659,36 +966,37 @@ function openPanel(panel: HTMLElement): void {
   for (const p of allPanels) {
     if (p !== panel) p.classList.remove('visible');
   }
+  if (interactiveTimeout) clearTimeout(interactiveTimeout);
+  interactiveTimeout = setTimeout(updateInteractive, 10);
   panel.classList.add('visible');
   positionPanel(panel);
+}
+
+function buildReflectionTemplate(todayNotes: string[]): string {
+  const lines: string[] = ['Daily Reflection', '', '1. สิ่งที่ทำวันนี้'];
+  if (todayNotes.length) {
+    for (const n of todayNotes) lines.push(`- ${n}`);
+  } else {
+    lines.push('- ');
+  }
+  lines.push('', '2. ความคืบหน้าเทียบกับเป้าหมาย', '- ', '', '3. ปัญหา / อุปสรรค', '- ');
+  return lines.join('\n');
 }
 
 function showPopup(mode: 'note' | 'reflection' | 'reminder-note', time?: string): void {
   popupMode = mode;
   openPanel(popup);
+  popup.classList.toggle('reminder', mode === 'reminder-note' || mode === 'reflection');
+  popup.classList.toggle('reflection', mode === 'reflection');
+  reminderAngry = mode === 'reminder-note' || mode === 'reflection';
+  applyMood();
   if (mode === 'reflection') {
-    popupTitle.textContent = "Today's recap — how was your day?";
-    noteInput.placeholder = 'Write your evening reflection…';
-    entriesDiv.classList.add('visible');
-    entriesDiv.textContent = 'Loading…';
+    popupTitle.textContent = 'Daily Reflection';
+    entriesDiv.classList.remove('visible');
+    noteInput.value = buildReflectionTemplate([]);
     api.getToday().then((log) => {
-      entriesDiv.innerHTML = '';
       const notes = log.entries.filter((e) => e.type === 'note');
-      if (!notes.length) {
-        entriesDiv.textContent = 'No notes logged today.';
-        return;
-      }
-      for (const e of notes) {
-        const d = new Date(e.time);
-        const row = document.createElement('div');
-        row.className = 'entry';
-        const t = document.createElement('span');
-        t.className = 't';
-        t.textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        row.appendChild(t);
-        row.appendChild(document.createTextNode(e.text));
-        entriesDiv.appendChild(row);
-      }
+      noteInput.value = buildReflectionTemplate(notes.map((e) => e.text));
     });
   } else {
     popupTitle.textContent = mode === 'reminder-note' ? 'REMINDER NOTE!' : 'QUICK NOTE';
@@ -704,7 +1012,11 @@ function showPopup(mode: 'note' | 'reflection' | 'reminder-note', time?: string)
 
 function hidePopup(): void {
   popup.classList.remove('visible');
+  popup.classList.remove('reminder');
+  popup.classList.remove('reflection');
   noteInput.value = '';
+  reminderAngry = false;
+  applyMood();
 }
 
 function togglePopup(): void {
@@ -822,9 +1134,54 @@ const setScroll = document.getElementById('setScroll') as HTMLInputElement;
 const setIdleStretch = document.getElementById('setIdleStretch') as HTMLInputElement;
 const setSaveJump = document.getElementById('setSaveJump') as HTMLInputElement;
 const setWakeStretch = document.getElementById('setWakeStretch') as HTMLInputElement;
+const themeGrid = document.getElementById('themeGrid')!;
 const notesDirEl = document.getElementById('notesDir')!;
 const settingsMsg = document.getElementById('settingsMsg')!;
+
+let selectedTheme = 'black';
+const themeSwatches = new Map<string, HTMLButtonElement>();
+
+function markSelectedTheme(id: string): void {
+  for (const [tid, el] of themeSwatches) el.classList.toggle('selected', tid === id);
+}
+
+function pickTheme(id: string): void {
+  selectedTheme = id;
+  markSelectedTheme(id);
+}
+
+for (const { id, label, img } of PATTERN_ORDER) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'theme-swatch';
+  const src = api.readPreset(img);
+  const base = (PATTERNS[id] && hexToRgb(PATTERNS[id].baseColor)) || [26, 26, 26];
+  const imgTag = src
+    ? `<img src="${src}" alt="${label}" draggable="false" />`
+    : `<span class="theme-fallback" style="background:rgb(${base.join(',')})"></span>`;
+  btn.innerHTML = `${imgTag}<span class="theme-name">${label}</span>`;
+  btn.addEventListener('click', () => pickTheme(id));
+  themeGrid.appendChild(btn);
+  themeSwatches.set(id, btn);
+}
+
 const settingsSaveBtn = document.getElementById('settingsSaveBtn')!;
+
+const settingsTabBtns = Array.from(
+  settingsPanel.querySelectorAll<HTMLButtonElement>('.tab-btn')
+);
+const settingsTabPages = Array.from(
+  settingsPanel.querySelectorAll<HTMLElement>('.tab-page')
+);
+
+function selectSettingsTab(tab: string): void {
+  for (const b of settingsTabBtns) b.classList.toggle('active', b.dataset.tab === tab);
+  for (const p of settingsTabPages) p.classList.toggle('visible', p.dataset.page === tab);
+}
+
+for (const btn of settingsTabBtns) {
+  btn.addEventListener('click', () => selectSettingsTab(btn.dataset.tab || 'general'));
+}
 
 document.getElementById('openNotesBtn')!.addEventListener('click', () => api.openNotesFolder());
 
@@ -839,10 +1196,13 @@ function fillSettings(cfg: AppConfig): void {
   setIdleStretch.checked = cfg.reactions.idleStretch;
   setSaveJump.checked = cfg.reactions.saveJump;
   setWakeStretch.checked = cfg.reactions.wakeStretch;
+  selectedTheme = cfg.pattern || 'black';
+  markSelectedTheme(selectedTheme);
 }
 
 function showSettingsPanel(): void {
   openPanel(settingsPanel);
+  selectSettingsTab('general');
   settingsMsg.textContent = '';
   settingsMsg.className = 'hint';
   api.getConfig().then(fillSettings);
@@ -898,8 +1258,12 @@ settingsSaveBtn.addEventListener('click', () => {
         saveJump: setSaveJump.checked,
         wakeStretch: setWakeStretch.checked,
       },
+      pattern: selectedTheme,
     })
     .then((cfg) => {
+      if (selectedTheme !== savedTheme) {
+        triggerSkinChangeAnimation(selectedTheme);
+      }
       fillSettings(cfg);
       settingsMsg.textContent = '';
       const originalText = settingsSaveBtn.textContent;
@@ -923,6 +1287,26 @@ function save(): void {
 }
 
 saveBtn.addEventListener('click', save);
+const skipBtn = document.getElementById('skipBtn');
+if (skipBtn) {
+  skipBtn.addEventListener('click', () => {
+    hideAllPanels();
+    purr(1200);
+  });
+}
+const copyBtn = document.getElementById('copyBtn');
+if (copyBtn) {
+  copyBtn.addEventListener('click', () => {
+    const text = noteInput.value;
+    if (!text.trim()) return;
+    api.copyText(text);
+    const original = copyBtn.textContent;
+    copyBtn.textContent = 'Copied!';
+    setTimeout(() => {
+      copyBtn.textContent = original || 'Copy';
+    }, 1500);
+  });
+}
 for (const btn of document.querySelectorAll('.panel-close')) {
   btn.addEventListener('click', hideAllPanels);
 }
@@ -936,7 +1320,6 @@ document.addEventListener('keydown', (e) => {
 api.onCursor((p) => {
   if (pointerDown) return;
   cursor = p;
-  if (interactive) syncInteractive();
 });
 api.onTypingRate((r) => { typingRate = r; });
 api.onScrollRate((r) => { scrollRate = r; });
@@ -957,6 +1340,10 @@ api.onConfig((cfg) => {
     MAX_RATE = cfg.typing.maxKeysPerSecond;
   }
   if (cfg.reactions) reactions = { ...reactions, ...cfg.reactions };
+  if (typeof cfg.pattern === 'string') {
+    savedTheme = cfg.pattern;
+    if (!isChangingSkin) applyTheme(cfg.pattern);
+  }
 });
 api.onOpenPanel((panel) => {
   if (panel === 'note') showPopup('note');

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, powerMonitor, Tray, Menu, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, powerMonitor, Tray, Menu, nativeImage, shell, clipboard } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { loadConfig, saveConfig, sanitizeConfig, mergeConfig, Config } from './config';
@@ -165,7 +165,7 @@ function appMenuTemplate(): Electron.MenuItemConstructorOptions[] {
 }
 
 function createTray(): void {
-  const iconPath = path.join(__dirname, '..', '..', 'assets', 'cat', 'assets', 'catjang-logo.png');
+  const iconPath = path.join(app.getAppPath(), 'assets', 'icons', 'logo.png');
   let icon = nativeImage.createFromPath(iconPath);
   if (!icon.isEmpty()) icon = icon.resize({ width: 18, height: 18 });
   tray = new Tray(icon);
@@ -286,12 +286,39 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-const ASSET_DIR = path.join(__dirname, '..', '..', 'assets', 'cat');
+const ASSET_DIR = path.join(app.getAppPath(), 'assets', 'cat');
 
 ipcMain.on('read-asset', (e, name: unknown) => {
   try {
     if (typeof name !== 'string' || !name) throw new Error('invalid asset name');
     e.returnValue = fs.readFileSync(path.join(ASSET_DIR, path.basename(name)), 'utf8');
+  } catch {
+    e.returnValue = '';
+  }
+});
+
+ipcMain.on('read-preset', (e, name: unknown) => {
+  try {
+    if (typeof name !== 'string' || !/^[a-z-]+\.png$/.test(name)) throw new Error('invalid preset');
+    const buf = fs.readFileSync(path.join(ASSET_DIR, 'presets', name));
+    e.returnValue = `data:image/png;base64,${buf.toString('base64')}`;
+  } catch {
+    e.returnValue = '';
+  }
+});
+
+ipcMain.on('read-pattern', (e, id: unknown) => {
+  try {
+    if (typeof id !== 'string' || !/^[a-z-]+$/.test(id)) throw new Error('invalid pattern');
+    e.returnValue = fs.readFileSync(path.join(ASSET_DIR, 'patterns', `${id}.json`), 'utf8');
+  } catch {
+    e.returnValue = '';
+  }
+});
+
+ipcMain.on('read-cellmap', (e) => {
+  try {
+    e.returnValue = fs.readFileSync(path.join(ASSET_DIR, 'patterns', 'cell-mappings.json'), 'utf8');
   } catch {
     e.returnValue = '';
   }
@@ -320,6 +347,19 @@ ipcMain.on('move-window', (_e, payload: unknown) => {
   safeSetPosition(x + p.dx, y + p.dy);
 });
 
+ipcMain.on('set-position', (_e, x: unknown, y: unknown) => {
+  if (typeof x === 'number' && typeof y === 'number') safeSetPosition(x, y);
+});
+
+ipcMain.handle('get-position', () => {
+  return win ? win.getPosition() : [0, 0];
+});
+
+ipcMain.handle('get-display-bounds', () => {
+  if (!win) return { x: 0, y: 0, width: 1920, height: 1080 };
+  return screen.getDisplayMatching(win.getBounds()).workArea;
+});
+
 ipcMain.on('set-ignore-mouse-events', (_e, ignore: unknown) => {
   if (typeof ignore !== 'boolean') return;
   if (!win || win.isDestroyed()) return;
@@ -339,6 +379,11 @@ ipcMain.handle('get-overhang', () => {
 });
 
 ipcMain.on('ensure-on-screen', () => clampToScreen());
+
+ipcMain.on('copy-text', (_e, text: unknown) => {
+  if (typeof text !== 'string') return;
+  clipboard.writeText(text.slice(0, MAX_ENTRY_LENGTH));
+});
 
 ipcMain.on('show-context-menu', (e) => {
   const sender = BrowserWindow.fromWebContents(e.sender);

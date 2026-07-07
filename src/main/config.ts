@@ -9,7 +9,16 @@ export interface Config {
   autoStartAtLogin: boolean;
   typing: { maxKeysPerSecond: number };
   reactions: { scroll: boolean; idleStretch: boolean; saveJump: boolean; wakeStretch: boolean };
+  pattern: string;
 }
+
+const PATTERN_IDS = ['black', 'white', 'orange', 'siamese', 'calico', 'mackerel'];
+const LEGACY_THEME_MAP: Record<string, string> = {
+  classic: 'black',
+  grey: 'black',
+  cream: 'siamese',
+  'russian-blue': 'black',
+};
 
 const DEFAULTS: Config = {
   reminders: ['11:30', '14:30', '16:00', '17:00'],
@@ -18,6 +27,7 @@ const DEFAULTS: Config = {
   autoStartAtLogin: true,
   typing: { maxKeysPerSecond: 5 },
   reactions: { scroll: true, idleStretch: true, saveJump: true, wakeStretch: true },
+  pattern: 'black',
 };
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -65,6 +75,15 @@ export function sanitizeConfig(raw: unknown): Partial<Config> {
     if (Number.isFinite(rate) && rate >= 1 && rate <= 30) {
       out.typing = { maxKeysPerSecond: rate };
     }
+  }
+  const rawPattern =
+    typeof src.pattern === 'string'
+      ? src.pattern
+      : typeof src.theme === 'string'
+        ? LEGACY_THEME_MAP[src.theme] || src.theme
+        : '';
+  if (PATTERN_IDS.includes(rawPattern)) {
+    out.pattern = rawPattern;
   }
   if (src.reactions && typeof src.reactions === 'object') {
     const r = src.reactions as Record<string, unknown>;

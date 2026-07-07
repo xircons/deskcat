@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('petApi', {
   readAsset: (name: string): string => ipcRenderer.sendSync('read-asset', name),
+  readPreset: (name: string): string => ipcRenderer.sendSync('read-preset', name),
+  readPattern: (id: string): string => ipcRenderer.sendSync('read-pattern', id),
+  readCellMap: (): string => ipcRenderer.sendSync('read-cellmap'),
   onCursor: (cb: (p: { x: number; y: number }) => void) =>
     ipcRenderer.on('cursor', (_e, p) => cb(p)),
   onTypingRate: (cb: (rate: number) => void) =>
@@ -16,7 +19,11 @@ contextBridge.exposeInMainWorld('petApi', {
   saveEntry: (text: string, type: 'note' | 'reflection') =>
     ipcRenderer.invoke('save-entry', { text, type }),
   getToday: () => ipcRenderer.invoke('get-today'),
+  copyText: (text: string) => ipcRenderer.send('copy-text', text),
   moveWindow: (dx: number, dy: number) => ipcRenderer.send('move-window', { dx, dy }),
+  setPosition: (x: number, y: number) => ipcRenderer.send('set-position', x, y),
+  getPosition: () => ipcRenderer.invoke('get-position'),
+  getDisplayBounds: () => ipcRenderer.invoke('get-display-bounds'),
   ensureOnScreen: () => ipcRenderer.send('ensure-on-screen'),
   hideCat: () => ipcRenderer.send('hide-cat'),
   petCat: () => ipcRenderer.send('pet-cat'),

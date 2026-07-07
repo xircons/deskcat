@@ -34,10 +34,10 @@
       "target": "dmg",
       "category": "public.app-category.productivity",
       "identity": null,
-      "icon": "assets/cat/assets/catjang-logo.png"
+      "icon": "assets/icons/logo.png"
     },
     "win": {
-      "icon": "assets/cat/assets/catjang-logo.ico"
+      "icon": "assets/icons/logo.ico"
     },
     "publish": {
       "provider": "github"

@@ -45,7 +45,7 @@
 <g id="se-cat-content" filter="url(#se-cat-outline)">
 <!-- 꼬리 — installTailComponent가 path/patches/clipPath 동적 주입.
      data-tail-path-id로 inner path에 id="se-tail-path" 부여 (chain 애니메이션용). -->
-<g id="se-tail"  data-tail-path-id="se-true"><path id="se-tail-path" transform="translate(27 125)" d="M0 8V7H6V6H8V5H9V4H8V1H9V0H11V1H12V2H13V7H12V8H11V9H9V10H4V9H1V8H0Z" fill="var(--cat-color)"/></g>
+<g id="se-tail"  data-tail-path-id="se-true" data-patch-frame="27 125 1 1"><path id="se-tail-path" transform="translate(27 125)" d="M0 8V7H6V6H8V5H9V4H8V1H9V0H11V1H12V2H13V7H12V8H11V9H9V10H4V9H1V8H0Z" fill="var(--cat-color)"/></g>
 <!-- 머리 -->
 <g id="se-head" data-patch-frame="9 6 1 1">
   <path d="M13 8H11V10H10V12H9V17H10V21H12V22H13V23H15V24H25V23H27V22H28V21H29V20H30V17H31V13H30V10H29V9H28V8H26V7H24V6H16V7H13V8Z" fill="var(--cat-color)"/>
