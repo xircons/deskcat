@@ -41,7 +41,7 @@
 </defs>
 <g id="pl-cat-content" filter="url(#pl-cat-outline)">
 <!-- 꼬리 (이전 M32 20 자리) — installTailComponent가 동적 주입 -->
-<g id="pl-tail" ><path transform="translate(32 12)" d="M0 8V7H6V6H8V5H9V4H8V1H9V0H11V1H12V2H13V7H12V8H11V9H9V10H4V9H1V8H0Z" fill="var(--cat-color)"/></g>
+<g id="pl-tail" data-patch-frame="32 12 1 1"><path transform="translate(32 12)" d="M0 8V7H6V6H8V5H9V4H8V1H9V0H11V1H12V2H13V7H12V8H11V9H9V10H4V9H1V8H0Z" fill="var(--cat-color)"/></g>
 <!-- 몸통 실루엣 (M33 15) — 맨 뒤. body 패턴 매핑 (22 cell × 15 row, 가시 body 영역에 비례). -->
 <g id="pl-body" data-patch-frame="14 13 1.136 1.6">
   <path d="M33 15V14H31V13H24.5H18V16H15V17H14V20.5H15V23.5H16V24.5H17V25.5H18V26.5H20.5V27.5H21.5V36.5H39V23H38V20H37V18H36V17H35V16H34V15H33Z" fill="var(--cat-color)"/>

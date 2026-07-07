@@ -231,7 +231,9 @@
     <clipPath id="idle-leg-fr-clip">
       <path d="M23 29V26H22V25H19V26H18V28H17V31H16V32H15V35H16V36H20V35H21V31H22V29H23Z"/>
     </clipPath>
-    <!-- tail-clip은 renderer.js의 installTailComponent가 동적 생성 -->
+    <clipPath id="idle-tail-clip">
+      <path transform="translate(20 24)" d="M0 8V7H6V6H8V5H9V4H8V1H9V0H11V1H12V2H13V7H12V8H11V9H9V10H4V9H1V8H0Z"/>
+    </clipPath>
   </defs>
 
   <g id="idle-body-js" filter="url(#idle-cat-outline)">
@@ -240,7 +242,7 @@
            회전축은 부모 .tail-sway에서 (24,31). -->
       <g class="hunting-tail-rise">
         <g class="tail-sway">
-          <g id="idle-tail" fill="var(--cat-color)" ><path transform="translate(20 24)" d="M0 8V7H6V6H8V5H9V4H8V1H9V0H11V1H12V2H13V7H12V8H11V9H9V10H4V9H1V8H0Z" fill="var(--cat-color)"/></g>
+          <g id="idle-tail" fill="var(--cat-color)" data-patch-frame="20 24 1 1"><path transform="translate(20 24)" d="M0 8V7H6V6H8V5H9V4H8V1H9V0H11V1H12V2H13V7H12V8H11V9H9V10H4V9H1V8H0Z" fill="var(--cat-color)"/><g class="patches" clip-path="url(#idle-tail-clip)"></g></g>
         </g>
       </g>
 

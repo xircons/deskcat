@@ -3,7 +3,8 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:" />
   <style>
     html,
     body {
@@ -177,32 +178,50 @@
       transform: scaleY(0.45);
     }
 
-    #cat-stage.lonely [id$="-ear-left"] {
+    #cat-stage.lonely #idle-ear-left {
       transform: rotate(-16deg);
       transform-origin: 8px 10px;
     }
 
-    #cat-stage.lonely [id$="-ear-right"] {
+    #cat-stage.lonely #idle-ear-right {
       transform: rotate(16deg);
       transform-origin: 20px 10px;
     }
 
-    .brow {
-      opacity: 0;
+    .pupil-left,
+    .pupil-right {
+      transform-box: fill-box;
+      transform-origin: center;
     }
 
-    #cat-stage.grumpy .brow {
-      opacity: 1;
+    #cat-stage.grumpy [id$="-eye-left"] {
+      clip-path: polygon(0 35%, 100% 65%, 100% 100%, 0 100%);
     }
 
-    #cat-stage.grumpy [id$="-ear-left"] {
+    #cat-stage.grumpy [id$="-eye-right"] {
+      clip-path: polygon(0 65%, 100% 35%, 100% 100%, 0 100%);
+    }
+
+    #cat-stage.grumpy #idle-ear-left {
       transform: rotate(-35deg) translateY(1px);
       transform-origin: 8px 10px;
     }
 
-    #cat-stage.grumpy [id$="-ear-right"] {
+    #cat-stage.grumpy #idle-ear-right {
       transform: rotate(35deg) translateY(1px);
       transform-origin: 20px 10px;
+    }
+
+    #cat-stage.grumpy #pl-ear-left,
+    #cat-stage.grumpy #pr-ear-left {
+      transform: rotate(-35deg) translateY(1px);
+      transform-origin: 13px 5px;
+    }
+
+    #cat-stage.grumpy #pl-ear-right,
+    #cat-stage.grumpy #pr-ear-right {
+      transform: rotate(35deg) translateY(1px);
+      transform-origin: 26px 5px;
     }
 
     .panel {
@@ -431,6 +450,36 @@
       box-shadow: 3px 3px 0 #1a1a1a;
     }
 
+    .pix-btn-ghost {
+      background: #f3f0e6;
+      color: #1a1a1a;
+    }
+
+    .pix-btn-ghost:hover {
+      background: #e6e2d4;
+    }
+
+    #skipBtn,
+    #copyBtn {
+      display: none;
+    }
+
+    #popup.reminder #skipBtn {
+      display: inline-block;
+    }
+
+    #popup.reflection #copyBtn {
+      display: inline-block;
+    }
+
+    #popup.reflection #noteInput {
+      min-height: 160px;
+    }
+
+    #popup.reminder .hint {
+      display: none;
+    }
+
     .nav-btn {
       padding: 2px 8px;
       font-size: 10px;
@@ -489,15 +538,17 @@
     .form-col label {
       font-size: 10px;
       color: #1a1a1a;
+      flex: 1;
     }
 
     .form-row .pix-input {
       width: 110px;
+      flex: 0 0 110px;
       font-size: 11px;
     }
 
     .form-row input[type="time"] {
-      width: 90px;
+      width: 110px;
     }
 
     input[type="time"]::-webkit-calendar-picker-indicator {
@@ -547,6 +598,129 @@
       white-space: nowrap;
     }
 
+    .tab-bar {
+      display: flex;
+      background: #e6e2d5;
+      border-bottom: 3px solid #1a1a1a;
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 6px 2px;
+      background: transparent;
+      border: none;
+      border-right: 2px solid #b9b4a4;
+      font-family: inherit;
+      font-size: 8px;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #8a8574;
+      cursor: pointer;
+    }
+
+    .tab-btn:last-child {
+      border-right: none;
+    }
+
+    .tab-btn:hover {
+      color: #1a1a1a;
+    }
+
+    .tab-btn.active {
+      background: #f4f1e8;
+      color: #d94f3d;
+    }
+
+    .tab-page {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+
+    .tab-page.visible {
+      display: flex;
+    }
+
+    .tab-page::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    .tab-page::-webkit-scrollbar-track {
+      background: #e6e2d5;
+    }
+
+    .tab-page::-webkit-scrollbar-thumb {
+      background: #1a1a1a;
+      border: 2px solid #e6e2d5;
+    }
+
+    .tab-page::-webkit-scrollbar-thumb:hover {
+      background: #d94f3d;
+    }
+
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .theme-swatch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 4px 6px;
+      background: #ffffff;
+      border: 2px solid #1a1a1a;
+      cursor: pointer;
+    }
+
+    .theme-swatch:hover {
+      background: #f0ece0;
+    }
+
+    .theme-swatch.selected {
+      border-color: #d94f3d;
+      box-shadow: 3px 3px 0 #d94f3d;
+    }
+
+    .theme-swatch img,
+    .theme-swatch .theme-fallback {
+      width: 40px;
+      height: 40px;
+      image-rendering: pixelated;
+    }
+
+    .theme-fallback {
+      border: 1px solid #1a1a1a;
+    }
+
+    .theme-swatch .theme-name {
+      font-size: 8px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #1a1a1a;
+    }
+
+    .theme-swatch.selected .theme-name {
+      color: #d94f3d;
+    }
+
+    #settingsPanel {
+      height: 300px;
+    }
+
+    #settingsPanel .panel-body {
+      flex: 1;
+    }
+
     #toast {
       position: absolute;
       bottom: 155px;
@@ -580,6 +754,8 @@
       <textarea id="noteInput" class="pix-input" placeholder="What just happened?"></textarea>
       <div class="panel-footer">
         <span class="hint">⌘/Ctrl+Enter save · Esc close</span>
+        <button id="skipBtn" class="pix-btn pix-btn-ghost">Skip</button>
+        <button id="copyBtn" class="pix-btn pix-btn-ghost">Copy</button>
         <button id="saveBtn" class="pix-btn">Save</button>
       </div>
     </div>
@@ -604,56 +780,71 @@
       <h3>Settings</h3>
       <button class="panel-close" title="Close (Esc)">✕</button>
     </div>
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="general">General</button>
+      <button class="tab-btn" data-tab="appearance">Appearance</button>
+      <button class="tab-btn" data-tab="reactions">Reactions</button>
+      <button class="tab-btn" data-tab="notes">Notes</button>
+    </div>
     <div class="panel-body">
-      <div class="form-col">
-        <label for="setReminders">Reminder times (HH:MM, comma separated)</label>
-        <input id="setReminders" class="pix-input" type="text" placeholder="11:30, 14:30, 17:00" />
+      <div class="tab-page visible" data-page="general">
+        <div class="form-col">
+          <label for="setReminders">Reminder times (HH:MM, comma separated)</label>
+          <input id="setReminders" class="pix-input" type="text" placeholder="11:30, 14:30, 17:00" />
+        </div>
+        <div class="form-row">
+          <label for="setReflection">Evening reflection time</label>
+          <input id="setReflection" class="pix-input" type="time" />
+        </div>
+        <div class="form-row">
+          <label for="setLonely">Lonely after (minutes)</label>
+          <input id="setLonely" class="pix-input" type="number" min="1" />
+        </div>
+        <div class="form-row">
+          <label for="setGrumpy">Grumpy after (minutes)</label>
+          <input id="setGrumpy" class="pix-input" type="number" min="1" />
+        </div>
+        <div class="form-row">
+          <label for="setTyping">Typing heat max (keys/sec)</label>
+          <input id="setTyping" class="pix-input" type="number" min="1" max="30" step="0.5" />
+        </div>
+        <div class="form-row">
+          <label for="setAutostart">Start at login</label>
+          <input id="setAutostart" type="checkbox" />
+        </div>
       </div>
-      <div class="form-row">
-        <label for="setReflection">Evening reflection time</label>
-        <input id="setReflection" class="pix-input" type="time" />
+      <div class="tab-page" data-page="appearance">
+        <label>Cat</label>
+        <div id="themeGrid" class="theme-grid"></div>
+        <span class="hint">Tap a cat to preview. Save to keep.</span>
       </div>
-      <div class="form-row">
-        <label for="setLonely">Lonely after (minutes)</label>
-        <input id="setLonely" class="pix-input" type="number" min="1" />
+      <div class="tab-page" data-page="reactions">
+        <div class="form-row">
+          <label for="setScroll">Scroll reaction</label>
+          <input id="setScroll" type="checkbox" />
+        </div>
+        <div class="form-row">
+          <label for="setIdleStretch">Idle stretch</label>
+          <input id="setIdleStretch" type="checkbox" />
+        </div>
+        <div class="form-row">
+          <label for="setSaveJump">Save jump</label>
+          <input id="setSaveJump" type="checkbox" />
+        </div>
+        <div class="form-row">
+          <label for="setWakeStretch">Wake-up stretch</label>
+          <input id="setWakeStretch" type="checkbox" />
+        </div>
       </div>
-      <div class="form-row">
-        <label for="setGrumpy">Grumpy after (minutes)</label>
-        <input id="setGrumpy" class="pix-input" type="number" min="1" />
-      </div>
-      <div class="form-row">
-        <label for="setTyping">Typing heat max (keys/sec)</label>
-        <input id="setTyping" class="pix-input" type="number" min="1" max="30" step="0.5" />
-      </div>
-      <div class="form-row">
-        <label for="setAutostart">Start at login</label>
-        <input id="setAutostart" type="checkbox" />
-      </div>
-      <div class="form-sep">Reactions</div>
-      <div class="form-row">
-        <label for="setScroll">Scroll reaction</label>
-        <input id="setScroll" type="checkbox" />
-      </div>
-      <div class="form-row">
-        <label for="setIdleStretch">Idle stretch</label>
-        <input id="setIdleStretch" type="checkbox" />
-      </div>
-      <div class="form-row">
-        <label for="setSaveJump">Save jump</label>
-        <input id="setSaveJump" type="checkbox" />
-      </div>
-      <div class="form-row">
-        <label for="setWakeStretch">Wake-up stretch</label>
-        <input id="setWakeStretch" type="checkbox" />
-      </div>
-      <div class="form-sep">Notes</div>
-      <div class="form-row">
-        <span id="notesDir" class="hint"></span>
-        <button id="openNotesBtn" class="pix-btn nav-btn">Open</button>
+      <div class="tab-page" data-page="notes">
+        <div class="form-row">
+          <span id="notesDir" class="hint"></span>
+          <button id="openNotesBtn" class="pix-btn nav-btn">Open</button>
+        </div>
+        <button id="settingsTestReminderBtn" class="pix-btn pix-btn-ghost">Test Reminder</button>
       </div>
       <div class="panel-footer">
         <span id="settingsMsg" class="hint"></span>
-        <button id="settingsTestReminderBtn" class="pix-btn" style="background: #888; width: 100%; margin-bottom: 8px;">Test Reminder</button>
         <button id="settingsSaveBtn" class="pix-btn">Save</button>
       </div>
     </div>
