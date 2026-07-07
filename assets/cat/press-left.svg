@@ -76,6 +76,10 @@
   <g class="patches" clip-path="url(#pl-leg-fr-clip)"></g>
 </g>
 
+<!-- 귀 — installEarComponents가 표준 ear path 동적 주입 -->
+<g id="pl-ear-left"><path transform="translate(11 3)" d="M0 7V4H1V2H2V1H3V0H4V2H5V3H6V7H5V8H1V7H0Z" fill="var(--cat-color)"/></g>
+<g id="pl-ear-right"><path transform="translate(23 3)" d="M1 3H0V7H1V8H4V7H5V2H4V1H3V0H2V1H1V3Z" fill="var(--cat-color)"/></g>
+
 <!-- 머리 -->
 <g id="pl-head" data-patch-frame="9 7 1 1">
   <path d="M13 9H11V11H10V13H9V18H10V22H12V23H13V24H15V25H25V24H27V23H28V22H29V21H30V18H31V14H30V11H29V10H28V9H26V8H24V7H16V8H13V9Z" fill="var(--cat-color)"/>
@@ -86,12 +90,6 @@
   <rect width="6" height="1" transform="translate(5 17)" fill="var(--cat-color)"/>
   <rect width="6" height="1" transform="translate(6 20)" fill="var(--cat-color)"/>
 </g>
-
-
-<!-- 귀 — installEarComponents가 표준 ear path 동적 주입 -->
-<g id="pl-ear-left"><path transform="translate(11 3)" d="M0 7V4H1V2H2V1H3V0H4V2H5V3H6V7H5V8H1V7H0Z" fill="var(--cat-color)"/></g>
-<g id="pl-ear-right"><path transform="translate(23 3)" d="M1 3H0V7H1V8H4V7H5V2H4V1H3V0H2V1H1V3Z" fill="var(--cat-color)"/></g>
-
 <!-- 눈 -->
 <g>
   <rect width="1" height="3" transform="translate(20 15)" fill="var(--eye-bg-color, #FFFFFF)"/>

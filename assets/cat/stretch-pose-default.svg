@@ -230,6 +230,9 @@
   </g>
   <!-- 머리 + 귀 + 수염 + 눈 -->
   <g id="spd-head-group">
+    <!-- 귀 — installEarComponents가 표준 ear path 동적 주입 -->
+    <g id="spd-ear-left" data-ear-position="6 11"><path transform="translate(6 11)" d="M0 7V4H1V2H2V1H3V0H4V2H5V3H6V7H5V8H1V7H0Z" fill="var(--cat-color)"/></g>
+    <g id="spd-ear-right" data-ear-position="18 11"><path transform="translate(18 11)" d="M1 3H0V7H1V8H4V7H5V2H4V1H3V0H2V1H1V3Z" fill="var(--cat-color)"/></g>
     <g id="spd-head" data-patch-frame="4 15 1 1">
       <path d="M8 17H6V19H5V21H4V26H5V30H7V31H8V32H10V33H20V32H22V31H23V30H24V29H25V26H26V22H25V19H24V18H23V17H21V16H19V15H11V16H8V17Z" fill="var(--cat-color)"/>
       <g class="patches" clip-path="url(#spd-head-clip)"></g>
@@ -238,9 +241,6 @@
       <rect width="6" height="1" transform="translate(0 25)" fill="var(--cat-color)"/>
       <rect width="6" height="1" transform="translate(1 28)" fill="var(--cat-color)"/>
     </g>
-    <!-- 귀 — installEarComponents가 표준 ear path 동적 주입 -->
-    <g id="spd-ear-left" data-ear-position="6 11"><path transform="translate(6 11)" d="M0 7V4H1V2H2V1H3V0H4V2H5V3H6V7H5V8H1V7H0Z" fill="var(--cat-color)"/></g>
-    <g id="spd-ear-right" data-ear-position="18 11"><path transform="translate(18 11)" d="M1 3H0V7H1V8H4V7H5V2H4V1H3V0H2V1H1V3Z" fill="var(--cat-color)"/></g>
     <!-- 평상시 뜬 눈 (open) -->
     <g id="spd-eyes-open">
       <g>
