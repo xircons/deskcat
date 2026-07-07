@@ -214,6 +214,23 @@ let savedTheme = 'black';
 
 const PATTERN_POSES: PoseName[] = ['idle', 'pl', 'pr', 'drag', 'jstart', 'jing', 'scroll', 'spd'];
 
+function getOrCreateRect(slot: SVGGElement, index: number, NS: string): SVGRectElement {
+  if (index < slot.children.length) {
+    const r = slot.children[index] as SVGRectElement;
+    r.style.display = 'block';
+    return r;
+  }
+  const r = document.createElementNS(NS, 'rect') as SVGRectElement;
+  slot.appendChild(r);
+  return r;
+}
+
+function hideUnusedRects(slot: SVGGElement, startIndex: number): void {
+  for (let i = startIndex; i < slot.children.length; i++) {
+    (slot.children[i] as SVGRectElement).style.display = 'none';
+  }
+}
+
 function paintPartSpots(
   poseEl: HTMLElement,
   poseName: PoseName,
@@ -222,15 +239,12 @@ function paintPartSpots(
 ): void {
   if (poseName === 'drag' && part === 'body' && typeof chain !== 'undefined' && chain) {
     const { wrappers, lerpData } = chain;
-    for (const wrap of wrappers) {
-      const slot = wrap.querySelector('.patches');
-      if (slot) while (slot.firstChild) slot.removeChild(slot.firstChild);
-    }
+    const wrapperIndices = new Array(wrappers.length).fill(0);
     const NS = 'http://www.w3.org/2000/svg';
     for (const s of spots) {
       const idx = Math.max(0, Math.min(PHYS.N_SEG - 1, Math.floor(s.y)));
       const wrapper = wrappers[idx];
-      const slot = wrapper.querySelector('.patches');
+      const slot = wrapper.querySelector('.patches') as SVGGElement;
       const ld = lerpData.find(d => d.rect.parentNode === wrapper);
       if (!slot || !ld) continue;
       
@@ -239,13 +253,16 @@ function paintPartSpots(
       const ox = ld.startX;
       const oy = ld.startYLocal;
       
-      const r = document.createElementNS(NS, 'rect');
+      const r = getOrCreateRect(slot, wrapperIndices[idx]++, NS);
       r.setAttribute('x', String(ox + s.x * cw));
       r.setAttribute('y', String(oy)); 
       r.setAttribute('width', String(cw));
       r.setAttribute('height', String(ch));
       r.setAttribute('fill', s.color);
-      slot.appendChild(r);
+    }
+    for (let i = 0; i < wrappers.length; i++) {
+      const slot = wrappers[i].querySelector('.patches') as SVGGElement;
+      if (slot) hideUnusedRects(slot, wrapperIndices[i]);
     }
     return;
   }
@@ -278,39 +295,42 @@ function paintPartSpots(
         }
       }
     }
-    while (slot.firstChild) slot.removeChild(slot.firstChild);
+    
     const NS = 'http://www.w3.org/2000/svg';
     const svgName = POSE_SVG_NAME[poseName];
     const map = svgName && (part === 'head' || part === 'body') ? CELLMAP[`${svgName}:${part}`] : undefined;
     const frame = el.getAttribute('data-patch-frame');
+    let rectIndex = 0;
+    
     if (map) {
       const [ox, oy] = map.origin;
       for (const s of spots) {
         const cell = map.cells[`${s.x},${s.y}`];
         if (!cell) continue;
         for (const [dx, dy] of cell) {
-          const r = document.createElementNS(NS, 'rect');
+          const r = getOrCreateRect(slot, rectIndex++, NS);
           r.setAttribute('x', String(ox + dx));
           r.setAttribute('y', String(oy + dy));
           r.setAttribute('width', '1');
           r.setAttribute('height', '1');
           r.setAttribute('fill', s.color);
-          slot.appendChild(r);
         }
       }
-      continue;
+    } else if (frame) {
+      const f = frame.split(/\s+/).map(Number);
+      if (f.length >= 4) {
+        const [ox, oy, cw, ch] = f;
+        for (const s of spots) {
+          const r = getOrCreateRect(slot, rectIndex++, NS);
+          r.setAttribute('x', String(ox + s.x * cw));
+          r.setAttribute('y', String(oy + s.y * ch));
+          r.setAttribute('width', String(cw));
+          r.setAttribute('height', String(ch));
+          r.setAttribute('fill', s.color);
+        }
+      }
     }
-    if (!frame) continue;
-    const [ox, oy, cw, ch] = frame.split(/\s+/).map(Number);
-    for (const s of spots) {
-      const r = document.createElementNS(NS, 'rect');
-      r.setAttribute('x', String(ox + s.x * cw));
-      r.setAttribute('y', String(oy + s.y * ch));
-      r.setAttribute('width', String(cw));
-      r.setAttribute('height', String(ch));
-      r.setAttribute('fill', s.color);
-      slot.appendChild(r);
-    }
+    hideUnusedRects(slot, rectIndex);
   }
 }
 
@@ -404,13 +424,7 @@ function rectGeom(r: SVGRectElement): { x: number; y: number; useTransform: bool
     useTransform: !!m,
   };
 }
-function setRectXY(rect: SVGRectElement, x: number, y: number, useTransform: boolean): void {
-  if (useTransform) rect.setAttribute('transform', `translate(${x} ${y})`);
-  else {
-    rect.setAttribute('x', String(x));
-    rect.setAttribute('y', String(y));
-  }
-}
+// setRectXY removed, using inline styles for hardware acceleration
 
 function setupChain(): ChainData | null {
   const root = poseEls.drag.querySelector('svg');
@@ -475,7 +489,9 @@ function setupChain(): ChainData | null {
         startH: startHs[rd.origIdx] !== undefined ? startHs[rd.origIdx] : rd.h,
         endH: rd.h,
       });
-      rd.rect.remove();
+      rd.rect.removeAttribute('x');
+      rd.rect.removeAttribute('y');
+      rd.rect.removeAttribute('transform');
     }
   }
 
@@ -485,7 +501,14 @@ function setupChain(): ChainData | null {
   const NS = 'http://www.w3.org/2000/svg';
   for (let i = 0; i < PHYS.N_SEG; i++) {
     const wrap = document.createElementNS(NS, 'g') as SVGGElement;
-    for (const rd of segments[i].rects) wrap.appendChild(rd.rect);
+    for (const rd of segments[i].rects) {
+      const ld = lerpData.find((d) => d.rect === rd.rect);
+      if (ld) {
+        rd.rect.setAttribute('width', String(ld.startW));
+        rd.rect.setAttribute('height', String(ld.startH));
+      }
+      wrap.appendChild(rd.rect);
+    }
     const patches = document.createElementNS(NS, 'g');
     patches.setAttribute('class', 'patches');
     wrap.appendChild(patches);
@@ -527,22 +550,24 @@ function applyChain(): void {
 
   for (let i = 0; i < wrappers.length; i++) {
     const ty = i === 0 ? bodyYmin : segHeight;
-    wrappers[i].setAttribute('transform', `translate(${phys.dxState[i].toFixed(3)} ${ty.toFixed(3)})`);
+    wrappers[i].style.transform = `translate3d(${phys.dxState[i].toFixed(3)}px, ${ty.toFixed(3)}px, 0)`;
   }
 
   for (const ld of lerpData) {
     const x = ld.startX + (ld.endX - ld.startX) * phys.stretchT;
     const y = ld.startYLocal + (ld.endYLocal - ld.startYLocal) * phys.stretchT;
-    setRectXY(ld.rect, x, y, ld.useTransform);
-    ld.rect.setAttribute('width', Math.max(0, ld.startW + (ld.endW - ld.startW) * phys.stretchT).toFixed(3));
-    ld.rect.setAttribute('height', Math.max(0, ld.startH + (ld.endH - ld.startH) * phys.stretchT).toFixed(3));
+    
+    const w = Math.max(0, ld.startW + (ld.endW - ld.startW) * phys.stretchT);
+    const h = Math.max(0, ld.startH + (ld.endH - ld.startH) * phys.stretchT);
+    const scaleX = ld.startW > 0 ? w / ld.startW : 1;
+    const scaleY = ld.startH > 0 ? h / ld.startH : 1;
+    
+    ld.rect.style.transform = `translate3d(${x.toFixed(3)}px, ${y.toFixed(3)}px, 0) scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, 1)`;
 
     const parent = ld.rect.parentNode as SVGGElement;
-    const patches = parent?.querySelector('.patches');
+    const patches = parent?.querySelector('.patches') as SVGGElement;
     if (patches && ld.startH > 0 && ld.startW > 0) {
-      const heightRatio = Math.max(0, ld.startH + (ld.endH - ld.startH) * phys.stretchT) / ld.startH;
-      const scaleX = Math.max(0, ld.startW + (ld.endW - ld.startW) * phys.stretchT) / ld.startW;
-      patches.setAttribute('transform', `translate(${x} ${y}) scale(${scaleX} ${heightRatio}) translate(${-ld.startX} ${-ld.startYLocal})`);
+      patches.style.transform = `translate3d(${x.toFixed(3)}px, ${y.toFixed(3)}px, 0) scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, 1) translate3d(${-ld.startX}px, ${-ld.startYLocal}px, 0)`;
     }
   }
 
@@ -550,14 +575,14 @@ function applyChain(): void {
     const ty = lg.delta * (1 - phys.stretchT);
     let dx = 0;
     for (let i = 0; i <= lg.segIdx; i++) dx += phys.dxState[i];
-    lg.el.setAttribute('transform', `translate(${dx.toFixed(3)} ${ty.toFixed(3)})`);
+    lg.el.style.transform = `translate3d(${dx.toFixed(3)}px, ${ty.toFixed(3)}px, 0)`;
   }
 
   if (tailGroup && tailEndY !== null && tailStartY !== null) {
     let tailDx = 0;
     for (let i = 0; i < phys.dxState.length; i++) tailDx += phys.dxState[i];
     const offsetY = (tailStartY - tailEndY) * (1 - phys.stretchT);
-    tailGroup.setAttribute('transform', `translate(${tailDx.toFixed(3)} ${offsetY.toFixed(2)})`);
+    tailGroup.style.transform = `translate3d(${tailDx.toFixed(3)}px, ${offsetY.toFixed(3)}px, 0)`;
   }
 }
 
@@ -582,7 +607,8 @@ function chainTick(): void {
     showPose('idle');
     api.moveWindow(0, -HEAD_ANCHOR_SHIFT_Y);
     api.ensureOnScreen();
-    syncInteractive();
+    if (interactiveTimeout) clearTimeout(interactiveTimeout);
+    interactiveTimeout = setTimeout(updateInteractive, 10);
     document.body.classList.remove('dragging');
     const openNow = allPanels.find((p) => p.classList.contains('visible'));
     if (openNow) positionPanel(openNow);
@@ -796,23 +822,14 @@ let lastX = 0, lastY = 0;
 let downX = 0, downY = 0;
 
 let interactive = false;
-function setInteractive(v: boolean): void {
-  if (v === interactive) return;
-  interactive = v;
-  api.setIgnoreMouseEvents(!v);
-}
+let hoverCount = 0;
+let interactiveTimeout: ReturnType<typeof setTimeout> | null = null;
 
-function overInteractive(x: number, y: number): boolean {
-  const el = document.elementFromPoint(x, y);
-  return !!el && (stage.contains(el) || allPanels.some((p) => p.contains(el)));
-}
-
-function syncInteractive(): void {
-  if (pointerDown) {
-    setInteractive(true);
-    return;
-  }
-  setInteractive(overInteractive(cursor.x, cursor.y));
+function updateInteractive(): void {
+  const shouldBeInteractive = pointerDown || hoverCount > 0;
+  if (shouldBeInteractive === interactive) return;
+  interactive = shouldBeInteractive;
+  api.setIgnoreMouseEvents(!interactive);
 }
 
 stage.addEventListener('pointerdown', (e) => {
@@ -855,7 +872,8 @@ function endPointer(wasCancelled: boolean): void {
   } else if (!wasCancelled && Date.now() - downAt < 350) {
     togglePopup();
   }
-  syncInteractive();
+  if (interactiveTimeout) clearTimeout(interactiveTimeout);
+  interactiveTimeout = setTimeout(updateInteractive, 10);
 }
 
 stage.addEventListener('pointerup', () => endPointer(false));
@@ -895,8 +913,16 @@ stage.addEventListener('contextmenu', (e: MouseEvent) => {
 });
 
 for (const el of [stage, ...allPanels]) {
-  el.addEventListener('mouseenter', () => setInteractive(true));
-  el.addEventListener('mouseleave', () => syncInteractive());
+  el.addEventListener('mouseenter', () => {
+    hoverCount++;
+    if (interactiveTimeout) clearTimeout(interactiveTimeout);
+    updateInteractive();
+  });
+  el.addEventListener('mouseleave', () => {
+    hoverCount = Math.max(0, hoverCount - 1);
+    if (interactiveTimeout) clearTimeout(interactiveTimeout);
+    interactiveTimeout = setTimeout(updateInteractive, 10);
+  });
 }
 
 let popupMode: 'note' | 'reflection' | 'reminder-note' = 'note';
@@ -931,7 +957,8 @@ function hideAllPanels(): void {
   reminderAngry = false;
   applyMood();
   applyTheme(savedTheme);
-  syncInteractive();
+  if (interactiveTimeout) clearTimeout(interactiveTimeout);
+  interactiveTimeout = setTimeout(updateInteractive, 10);
 }
 
 function openPanel(panel: HTMLElement): void {
@@ -939,6 +966,8 @@ function openPanel(panel: HTMLElement): void {
   for (const p of allPanels) {
     if (p !== panel) p.classList.remove('visible');
   }
+  if (interactiveTimeout) clearTimeout(interactiveTimeout);
+  interactiveTimeout = setTimeout(updateInteractive, 10);
   panel.classList.add('visible');
   positionPanel(panel);
 }
@@ -1300,7 +1329,6 @@ document.addEventListener('keydown', (e) => {
 api.onCursor((p) => {
   if (pointerDown) return;
   cursor = p;
-  if (interactive) syncInteractive();
 });
 api.onTypingRate((r) => { typingRate = r; });
 api.onScrollRate((r) => { scrollRate = r; });
