@@ -5,36 +5,93 @@ interface AppConfig {
   autoStartAtLogin: boolean;
   typing: { maxKeysPerSecond: number };
   reactions: { scroll: boolean; idleStretch: boolean; saveJump: boolean; wakeStretch: boolean };
-  theme: string;
+  pattern: string;
 }
 
-interface CatTheme {
-  calm: [number, number, number];
-  eye: string;
-  outline: string;
+interface Spot { x: number; y: number; color: string }
+interface PatternData {
+  baseColor: string;
+  eyeColor: string;
+  eyeBgColor: string;
+  oddEye: boolean;
+  eyeColorLeft: string;
+  eyeColorRight: string;
+  head: Spot[];
+  body: Spot[];
+  tail: Spot[];
+  earL: Spot[];
+  earR: Spot[];
+  legFl: Spot[];
+  legFr: Spot[];
+  legRl: Spot[];
+  legRr: Spot[];
 }
 
-const THEMES: Record<string, CatTheme> = {
-  black: { calm: [26, 26, 26], eye: '#0a0a0a', outline: '#ffffff' },
-  white: { calm: [242, 242, 242], eye: '#2a2a2a', outline: '#1a1a1a' },
-  orange: { calm: [214, 126, 50], eye: '#1a1a1a', outline: '#ffffff' },
-  siamese: { calm: [223, 213, 197], eye: '#3a2f28', outline: '#6b5b4a' },
-  calico: { calm: [238, 230, 218], eye: '#3a2f28', outline: '#8a7a68' },
-  mackerel: { calm: [122, 98, 71], eye: '#1a1a1a', outline: '#ffffff' },
-};
-
-const THEME_ORDER: Array<{ id: string; label: string; img: string }> = [
+const PATTERN_ORDER: Array<{ id: string; label: string; img: string }> = [
   { id: 'black', label: 'Black', img: 'black.png' },
-  { id: 'white', label: 'White', img: 'white.png' },
+  { id: 'white', label: 'Grey', img: 'white.png' },
   { id: 'orange', label: 'Orange', img: 'orange.png' },
   { id: 'siamese', label: 'Siamese', img: 'siamese.png' },
   { id: 'calico', label: 'Calico', img: 'calico.png' },
   { id: 'mackerel', label: 'Tabby', img: 'mackerel.png' },
 ];
 
+const PATTERNS: Record<string, PatternData> = {};
+for (const { id } of PATTERN_ORDER) {
+  try {
+    const raw = (window as unknown as { petApi: { readPattern(i: string): string } }).petApi.readPattern(id);
+    if (raw) PATTERNS[id] = JSON.parse(raw) as PatternData;
+  } catch {
+    void 0;
+  }
+}
+
+const PART_SUFFIX: Record<
+  keyof Pick<PatternData, 'head' | 'body' | 'tail' | 'earL' | 'earR' | 'legFl' | 'legFr' | 'legRl' | 'legRr'>,
+  string
+> = {
+  head: '-head',
+  body: '-body',
+  tail: '-tail',
+  earL: '-ear-left',
+  earR: '-ear-right',
+  legFl: '-leg-fl',
+  legFr: '-leg-fr',
+  legRl: '-leg-rl',
+  legRr: '-leg-rr',
+};
+
+type CellMap = Record<string, { origin: [number, number]; cells: Record<string, [number, number][]> }>;
+const CELLMAP: CellMap = (() => {
+  try {
+    const raw = (window as unknown as { petApi: { readCellMap(): string } }).petApi.readCellMap();
+    return raw ? (JSON.parse(raw) as CellMap) : {};
+  } catch {
+    return {};
+  }
+})();
+
+const POSE_SVG_NAME: Partial<Record<string, string>> = {
+  pl: 'press-left',
+  pr: 'press-right',
+  jstart: 'jump-start',
+  jing: 'jump-ing',
+  scroll: 'scroll-unroll',
+  spd: 'stretch-pose-default',
+};
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 interface PetApi {
   readAsset(name: string): string;
   readPreset(name: string): string;
+  readPattern(id: string): string;
+  readCellMap(): string;
   onCursor(cb: (p: { x: number; y: number }) => void): void;
   onTypingRate(cb: (rate: number) => void): void;
   onScrollRate(cb: (rate: number) => void): void;
@@ -45,6 +102,9 @@ interface PetApi {
   getToday(): Promise<{ date: string; entries: { time: string; text: string; type: string }[] }>;
   copyText(text: string): void;
   moveWindow(dx: number, dy: number): void;
+  setPosition(x: number, y: number): void;
+  getPosition(): Promise<[number, number]>;
+  getDisplayBounds(): Promise<{ x: number; y: number; width: number; height: number }>;
   ensureOnScreen(): void;
   hideCat(): void;
   petCat(): void;
@@ -114,33 +174,6 @@ function showPose(name: PoseName): void {
   currentPose = name;
 }
 
-function addBrowsTo(
-  poseEl: HTMLElement,
-  positions: Array<[number, number]>,
-  y: number,
-  height: number
-): void {
-  const svg = poseEl.querySelector('svg');
-  if (!svg) return;
-  const anchor = poseEl.querySelector('[id$="-eyes-js"]')?.parentNode || svg;
-  const NS = 'http://www.w3.org/2000/svg';
-  for (const [x, deg] of positions) {
-    const r = document.createElementNS(NS, 'rect');
-    r.setAttribute('class', 'brow');
-    r.setAttribute('x', String(x));
-    r.setAttribute('y', String(y));
-    r.setAttribute('width', '6');
-    r.setAttribute('height', String(height));
-    r.setAttribute('fill', 'var(--cat-color)');
-    r.setAttribute('transform', `rotate(${deg} ${x + 3} ${y + height / 2})`);
-    anchor.appendChild(r);
-  }
-}
-
-addBrowsTo(poseEls.idle, [[6.5, 16], [15.5, -16]], 9, 4.5);
-addBrowsTo(poseEls.pl, [[10.5, 16], [19.5, -16]], 11.5, 5);
-addBrowsTo(poseEls.pr, [[10.5, 16], [19.5, -16]], 11.5, 5);
-
 const pupilEls = {} as Record<PoseName, SVGElement[]>;
 for (const name of Object.keys(poseEls) as PoseName[]) {
   pupilEls[name] = Array.from(
@@ -165,8 +198,10 @@ function heat(): number { return Math.min(typingRate / MAX_RATE, 1); }
 let themeCalm: [number, number, number] = [26, 26, 26];
 
 function bodyColor(): string {
-  const t = heat();
-  const hot = [217, 79, 61];
+  const lum = (0.299 * themeCalm[0] + 0.587 * themeCalm[1] + 0.114 * themeCalm[2]) / 255;
+  const scale = 1 - Math.min(1, Math.max(0, (lum - 0.35) / 0.6)) * 0.72;
+  const t = heat() * scale;
+  const hot = [255, 140, 0];
   const mid = themeCalm.map((v, i) => (v + hot[i]) / 2);
   const c =
     t < 0.5
@@ -177,11 +212,134 @@ function bodyColor(): string {
 
 let savedTheme = 'black';
 
+const PATTERN_POSES: PoseName[] = ['idle', 'pl', 'pr', 'drag', 'jstart', 'jing', 'scroll', 'spd'];
+
+function paintPartSpots(
+  poseEl: HTMLElement,
+  poseName: PoseName,
+  part: keyof typeof PART_SUFFIX,
+  spots: Spot[]
+): void {
+  if (poseName === 'drag' && part === 'body' && typeof chain !== 'undefined' && chain) {
+    const { wrappers, lerpData } = chain;
+    for (const wrap of wrappers) {
+      const slot = wrap.querySelector('.patches');
+      if (slot) while (slot.firstChild) slot.removeChild(slot.firstChild);
+    }
+    const NS = 'http://www.w3.org/2000/svg';
+    for (const s of spots) {
+      const idx = Math.max(0, Math.min(PHYS.N_SEG - 1, Math.floor(s.y)));
+      const wrapper = wrappers[idx];
+      const slot = wrapper.querySelector('.patches');
+      const ld = lerpData.find(d => d.rect.parentNode === wrapper);
+      if (!slot || !ld) continue;
+      
+      const cw = ld.startW / 22;
+      const ch = ld.startH; 
+      const ox = ld.startX;
+      const oy = ld.startYLocal;
+      
+      const r = document.createElementNS(NS, 'rect');
+      r.setAttribute('x', String(ox + s.x * cw));
+      r.setAttribute('y', String(oy)); 
+      r.setAttribute('width', String(cw));
+      r.setAttribute('height', String(ch));
+      r.setAttribute('fill', s.color);
+      slot.appendChild(r);
+    }
+    return;
+  }
+
+  const els = poseEl.querySelectorAll<SVGGElement>(`[id$="${PART_SUFFIX[part]}"]`);
+  for (const el of Array.from(els)) {
+    let slot = el.querySelector<SVGGElement>('.patches');
+    if (!slot) {
+      const NS = 'http://www.w3.org/2000/svg';
+      slot = document.createElementNS(NS, 'g');
+      slot.setAttribute('class', 'patches');
+      el.appendChild(slot);
+      const pathNode = el.querySelector('path');
+      if (pathNode) {
+        let defs = poseEl.querySelector('defs');
+        const svg = poseEl.querySelector('svg');
+        if (!defs && svg) {
+          defs = document.createElementNS(NS, 'defs');
+          svg.insertBefore(defs, svg.firstChild);
+        }
+        if (defs) {
+          const clipId = `${el.id}-auto-clip`;
+          if (!defs.querySelector(`#${clipId}`)) {
+            const cp = document.createElementNS(NS, 'clipPath');
+            cp.setAttribute('id', clipId);
+            cp.appendChild(pathNode.cloneNode(true));
+            defs.appendChild(cp);
+          }
+          slot.setAttribute('clip-path', `url(#${clipId})`);
+        }
+      }
+    }
+    while (slot.firstChild) slot.removeChild(slot.firstChild);
+    const NS = 'http://www.w3.org/2000/svg';
+    const svgName = POSE_SVG_NAME[poseName];
+    const map = svgName && (part === 'head' || part === 'body') ? CELLMAP[`${svgName}:${part}`] : undefined;
+    const frame = el.getAttribute('data-patch-frame');
+    if (map) {
+      const [ox, oy] = map.origin;
+      for (const s of spots) {
+        const cell = map.cells[`${s.x},${s.y}`];
+        if (!cell) continue;
+        for (const [dx, dy] of cell) {
+          const r = document.createElementNS(NS, 'rect');
+          r.setAttribute('x', String(ox + dx));
+          r.setAttribute('y', String(oy + dy));
+          r.setAttribute('width', '1');
+          r.setAttribute('height', '1');
+          r.setAttribute('fill', s.color);
+          slot.appendChild(r);
+        }
+      }
+      continue;
+    }
+    if (!frame) continue;
+    const [ox, oy, cw, ch] = frame.split(/\s+/).map(Number);
+    for (const s of spots) {
+      const r = document.createElementNS(NS, 'rect');
+      r.setAttribute('x', String(ox + s.x * cw));
+      r.setAttribute('y', String(oy + s.y * ch));
+      r.setAttribute('width', String(cw));
+      r.setAttribute('height', String(ch));
+      r.setAttribute('fill', s.color);
+      slot.appendChild(r);
+    }
+  }
+}
+
+function paintPattern(p: PatternData): void {
+  for (const name of PATTERN_POSES) {
+    const el = poseEls[name];
+    for (const key of Object.keys(PART_SUFFIX) as Array<keyof typeof PART_SUFFIX>) {
+      paintPartSpots(el, name, key, p[key]);
+    }
+  }
+}
+
 function applyTheme(id: string): void {
-  const theme = THEMES[id] || THEMES.black;
-  themeCalm = theme.calm;
-  document.documentElement.style.setProperty('--eye-color', theme.eye);
-  document.documentElement.style.setProperty('--cat-outline', theme.outline);
+  const p = PATTERNS[id] || PATTERNS.black;
+  if (!p) return;
+  const base = hexToRgb(p.baseColor) || [26, 26, 26];
+  themeCalm = base;
+  const lum = (0.299 * base[0] + 0.587 * base[1] + 0.114 * base[2]) / 255;
+  document.documentElement.style.setProperty('--eye-bg-color', p.eyeBgColor);
+  document.documentElement.style.setProperty('--cat-outline', lum > 0.5 ? '#1a1a1a' : '#ffffff');
+  if (p.oddEye) {
+    document.documentElement.style.setProperty('--eye-color-left', p.eyeColorLeft);
+    document.documentElement.style.setProperty('--eye-color-right', p.eyeColorRight);
+  } else {
+    document.documentElement.style.removeProperty('--eye-color-left');
+    document.documentElement.style.removeProperty('--eye-color-right');
+    document.documentElement.style.setProperty('--eye-color', p.eyeColor);
+  }
+  paintPattern(p);
   lastBodyColor = '';
 }
 
@@ -328,6 +486,9 @@ function setupChain(): ChainData | null {
   for (let i = 0; i < PHYS.N_SEG; i++) {
     const wrap = document.createElementNS(NS, 'g') as SVGGElement;
     for (const rd of segments[i].rects) wrap.appendChild(rd.rect);
+    const patches = document.createElementNS(NS, 'g');
+    patches.setAttribute('class', 'patches');
+    wrap.appendChild(patches);
     parent.appendChild(wrap);
     parent = wrap;
     wrappers.push(wrap);
@@ -375,6 +536,14 @@ function applyChain(): void {
     setRectXY(ld.rect, x, y, ld.useTransform);
     ld.rect.setAttribute('width', Math.max(0, ld.startW + (ld.endW - ld.startW) * phys.stretchT).toFixed(3));
     ld.rect.setAttribute('height', Math.max(0, ld.startH + (ld.endH - ld.startH) * phys.stretchT).toFixed(3));
+
+    const parent = ld.rect.parentNode as SVGGElement;
+    const patches = parent?.querySelector('.patches');
+    if (patches && ld.startH > 0 && ld.startW > 0) {
+      const heightRatio = Math.max(0, ld.startH + (ld.endH - ld.startH) * phys.stretchT) / ld.startH;
+      const scaleX = Math.max(0, ld.startW + (ld.endW - ld.startW) * phys.stretchT) / ld.startW;
+      patches.setAttribute('transform', `translate(${x} ${y}) scale(${scaleX} ${heightRatio}) translate(${-ld.startX} ${-ld.startYLocal})`);
+    }
   }
 
   for (const lg of legGroups) {
@@ -481,6 +650,53 @@ function triggerJump(): void {
   setTimeout(() => stage.classList.remove('jumping'), JUMP_TOTAL_MS);
 }
 
+let isChangingSkin = false;
+
+function triggerSkinChangeAnimation(newTheme: string) {
+  if (isChangingSkin) return;
+  isChangingSkin = true;
+  
+  Promise.all([api.getPosition(), api.getDisplayBounds()]).then(([[startX, startY], bounds]) => {
+    let currentX = startX;
+    const speed = 15;
+    
+    const distToLeft = startX - bounds.x;
+    const distToRight = (bounds.x + bounds.width) - startX;
+    const runToLeftEdge = distToLeft < distToRight;
+    
+    const targetEdgeX = runToLeftEdge ? bounds.x - 120 : bounds.x + bounds.width;
+    const distToEdge = Math.abs(targetEdgeX - startX);
+    const ticksToEdge = Math.max(30, Math.ceil(distToEdge / speed));
+    
+    const velToEdge = runToLeftEdge ? -speed : speed;
+    const velFromEdge = runToLeftEdge ? speed : -speed;
+    
+    let ticks = 0;
+    const runInterval = setInterval(() => {
+      ticks++;
+      
+      if (ticks <= ticksToEdge) {
+        currentX += velToEdge;
+        api.setPosition(currentX, startY);
+        showPose(ticks % 6 < 3 ? 'pl' : 'pr');
+      }
+      
+      if (ticks === ticksToEdge) {
+        applyTheme(newTheme);
+      } else if (ticks > ticksToEdge && ticks <= ticksToEdge * 2) {
+        currentX += velFromEdge;
+        api.setPosition(currentX, startY);
+        showPose(ticks % 6 < 3 ? 'pl' : 'pr');
+      } else if (ticks > ticksToEdge * 2) {
+        clearInterval(runInterval);
+        isChangingSkin = false;
+        showPose('idle');
+        api.setPosition(startX, startY);
+      }
+    }, 16);
+  });
+}
+
 function frame(): void {
   const now = performance.now();
 
@@ -489,6 +705,12 @@ function frame(): void {
   const faceY = rect.top + rect.height * 0.35;
 
   chainTick();
+
+  if (isChangingSkin) {
+    updatePupils(faceX, faceY);
+    requestAnimationFrame(frame);
+    return;
+  }
 
   if (phys.dragging || phys.releasing) {
     if (stretchMode) cancelStretch(now);
@@ -897,17 +1119,17 @@ function markSelectedTheme(id: string): void {
 function pickTheme(id: string): void {
   selectedTheme = id;
   markSelectedTheme(id);
-  applyTheme(id);
 }
 
-for (const { id, label, img } of THEME_ORDER) {
+for (const { id, label, img } of PATTERN_ORDER) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'theme-swatch';
   const src = api.readPreset(img);
+  const base = (PATTERNS[id] && hexToRgb(PATTERNS[id].baseColor)) || [26, 26, 26];
   const imgTag = src
     ? `<img src="${src}" alt="${label}" draggable="false" />`
-    : `<span class="theme-fallback" style="background:rgb(${THEMES[id].calm.join(',')})"></span>`;
+    : `<span class="theme-fallback" style="background:rgb(${base.join(',')})"></span>`;
   btn.innerHTML = `${imgTag}<span class="theme-name">${label}</span>`;
   btn.addEventListener('click', () => pickTheme(id));
   themeGrid.appendChild(btn);
@@ -945,7 +1167,7 @@ function fillSettings(cfg: AppConfig): void {
   setIdleStretch.checked = cfg.reactions.idleStretch;
   setSaveJump.checked = cfg.reactions.saveJump;
   setWakeStretch.checked = cfg.reactions.wakeStretch;
-  selectedTheme = cfg.theme || 'black';
+  selectedTheme = cfg.pattern || 'black';
   markSelectedTheme(selectedTheme);
 }
 
@@ -1007,9 +1229,12 @@ settingsSaveBtn.addEventListener('click', () => {
         saveJump: setSaveJump.checked,
         wakeStretch: setWakeStretch.checked,
       },
-      theme: selectedTheme,
+      pattern: selectedTheme,
     })
     .then((cfg) => {
+      if (selectedTheme !== savedTheme) {
+        triggerSkinChangeAnimation(selectedTheme);
+      }
       fillSettings(cfg);
       settingsMsg.textContent = '';
       const originalText = settingsSaveBtn.textContent;
@@ -1096,9 +1321,9 @@ api.onConfig((cfg) => {
     MAX_RATE = cfg.typing.maxKeysPerSecond;
   }
   if (cfg.reactions) reactions = { ...reactions, ...cfg.reactions };
-  if (typeof cfg.theme === 'string') {
-    savedTheme = cfg.theme;
-    applyTheme(cfg.theme);
+  if (typeof cfg.pattern === 'string') {
+    savedTheme = cfg.pattern;
+    if (!isChangingSkin) applyTheme(cfg.pattern);
   }
 });
 api.onOpenPanel((panel) => {

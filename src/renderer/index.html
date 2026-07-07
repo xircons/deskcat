@@ -194,12 +194,12 @@
       transform-origin: center;
     }
 
-    .brow {
-      opacity: 0;
+    #cat-stage.grumpy [id$="-eye-left"] {
+      clip-path: polygon(0 35%, 100% 65%, 100% 100%, 0 100%);
     }
 
-    #cat-stage.grumpy .brow {
-      opacity: 1;
+    #cat-stage.grumpy [id$="-eye-right"] {
+      clip-path: polygon(0 65%, 100% 35%, 100% 100%, 0 100%);
     }
 
     #cat-stage.grumpy #idle-ear-left {
@@ -814,7 +814,7 @@
         </div>
       </div>
       <div class="tab-page" data-page="appearance">
-        <label>Cat color</label>
+        <label>Cat</label>
         <div id="themeGrid" class="theme-grid"></div>
         <span class="hint">Tap a cat to preview. Save to keep.</span>
       </div>

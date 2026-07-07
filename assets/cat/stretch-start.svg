@@ -18,15 +18,15 @@
 <rect x="12" y="24" width="16" height="3" fill="var(--cat-color)"/>
 <rect x="12" y="26" width="16" height="3" fill="var(--cat-color)"/>
 <rect x="12" y="28" width="16" height="3" fill="var(--cat-color)"/>
-<rect x="12" y="30" width="16" height="3" fill="var(--cat-color)"/>
-<rect x="12" y="32" width="16" height="3" fill="var(--cat-color)"/>
+<rect x="11" y="30" width="18" height="3" fill="var(--cat-color)"/>
+<rect x="11" y="32" width="18" height="3" fill="var(--cat-color)"/>
 <rect x="11" y="34" width="18" height="3" fill="var(--cat-color)"/>
 <rect x="11" y="36" width="18" height="3" fill="var(--cat-color)"/>
 <rect x="11" y="38" width="18" height="3" fill="var(--cat-color)"/>
 <rect x="11" y="40" width="18" height="3" fill="var(--cat-color)"/>
-<rect x="11" y="42" width="18" height="3" fill="var(--cat-color)"/>
-<rect x="11" y="44" width="18" height="3" fill="var(--cat-color)"/>
-<rect x="11" y="46" width="18" height="3" fill="var(--cat-color)"/>
+<rect x="10" y="42" width="20" height="3" fill="var(--cat-color)"/>
+<rect x="10" y="44" width="20" height="3" fill="var(--cat-color)"/>
+<rect x="10" y="46" width="20" height="3" fill="var(--cat-color)"/>
 <rect x="10" y="48" width="20" height="3" fill="var(--cat-color)"/>
 <rect x="10" y="50" width="20" height="3" fill="var(--cat-color)"/>
 <rect width="1" height="3" transform="translate(22 13)" fill="var(--eye-bg-color, #FFFFFF)"/>

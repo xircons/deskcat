@@ -307,6 +307,23 @@ ipcMain.on('read-preset', (e, name: unknown) => {
   }
 });
 
+ipcMain.on('read-pattern', (e, id: unknown) => {
+  try {
+    if (typeof id !== 'string' || !/^[a-z-]+$/.test(id)) throw new Error('invalid pattern');
+    e.returnValue = fs.readFileSync(path.join(ASSET_DIR, 'patterns', `${id}.json`), 'utf8');
+  } catch {
+    e.returnValue = '';
+  }
+});
+
+ipcMain.on('read-cellmap', (e) => {
+  try {
+    e.returnValue = fs.readFileSync(path.join(ASSET_DIR, 'patterns', 'cell-mappings.json'), 'utf8');
+  } catch {
+    e.returnValue = '';
+  }
+});
+
 ipcMain.handle('save-entry', (_e, payload: unknown) => {
   const p = payload as { text?: unknown; type?: unknown } | null;
   const text = p && typeof p.text === 'string' ? p.text.trim().slice(0, MAX_ENTRY_LENGTH) : '';
@@ -328,6 +345,19 @@ ipcMain.on('move-window', (_e, payload: unknown) => {
   if (!Number.isFinite(p.dx) || !Number.isFinite(p.dy)) return;
   const [x, y] = win.getPosition();
   safeSetPosition(x + p.dx, y + p.dy);
+});
+
+ipcMain.on('set-position', (_e, x: unknown, y: unknown) => {
+  if (typeof x === 'number' && typeof y === 'number') safeSetPosition(x, y);
+});
+
+ipcMain.handle('get-position', () => {
+  return win ? win.getPosition() : [0, 0];
+});
+
+ipcMain.handle('get-display-bounds', () => {
+  if (!win) return { x: 0, y: 0, width: 1920, height: 1080 };
+  return screen.getDisplayMatching(win.getBounds()).workArea;
 });
 
 ipcMain.on('set-ignore-mouse-events', (_e, ignore: unknown) => {
